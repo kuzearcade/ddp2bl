@@ -55,7 +55,7 @@ static void W32(u32 a, u32 v) { u8 *p = P(a); p[0] = v; p[1] = v >> 8; p[2] = v 
 
 /* ------------------------------------------------------------------ constants */
 #define SYS        0x18000000u   /* EST system variables */
-#define POOL       0x18000090u   /* 127 objects of 0x44 bytes */
+#define POOL       0x18000090u   /* 128 objects of 0x44 bytes */
 #define POOL_LAST  (POOL + 0x10de * 2)
 #define OBJ_SIZE   0x44u
 #define REQS       0x18002290u   /* copied spawn requests, 24 bytes each */
