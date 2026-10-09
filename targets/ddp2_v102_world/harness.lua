@@ -45,8 +45,10 @@ function T.make_bot(space, rand)
   local pl = {}
   for p = 1, players do pl[p] = { dir = 0, dir_left = 0, fire_hold = true, fire_left = 0 } end
   local dirs = { 0, 0x02, 0x04, 0x08, 0x10, 0x0a, 0x12, 0x0c, 0x14 } -- none, U, D, L, R, diagonals
+  local quiet = tonumber(os.getenv("DDP2H_BOT_QUIET") or "600") -- no inputs while the BIOS boots
   return function(frame)
     local p12, svc = 0xffff, 0xffff
+    if frame < quiet then return p12, 0xffff, svc end
     if frame % coin_every < 4 then svc = svc & ~0x01 end
     if frame % coin_every >= 8 and frame % coin_every < 12 then svc = svc & ~0x02 end
     for p = 1, players do
