@@ -7,3 +7,4 @@ __pycache__/
 harness/m68k/libm68r.so
 harness/m68k/m68kops.[ch]
 harness/m68k/m68kmake
+oracle/libestmodel.so

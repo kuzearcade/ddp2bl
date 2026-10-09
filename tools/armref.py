@@ -51,9 +51,13 @@ class ArmRef:
         uc.mem_map(RETURN_MAGIC & ~0xfff, 0x1000)
         self.insns = 0
         self.main_ctx = None
+        self.stop_at_idle = False
         uc.hook_add(UC_HOOK_CODE, self._count)
 
     def _count(self, uc, addr, size, user):
+        if self.stop_at_idle and addr == IDLE_PC and self.u16(QUEUE_COUNT) == 0 and self.u16(FLAG_RESET) == 0:
+            uc.emu_stop()
+            return
         self.insns += 1
 
     # ----------------------------------------------------------------- state
@@ -96,17 +100,14 @@ class ArmRef:
             uc.context_restore(self.main_ctx)
             pc = uc.reg_read(UC_ARM_REG_PC) | (1 if uc.reg_read(UC_ARM_REG_CPSR) & 0x20 else 0)
         start = self.insns
-        while True:
-            uc.emu_start(pc, IDLE_PC, count=max_insns)
-            cur = uc.reg_read(UC_ARM_REG_PC) & ~1
-            if cur != IDLE_PC:
-                raise RuntimeError("main loop stopped at %08x" % cur)
-            if self.u16(QUEUE_COUNT) == 0 and self.u16(FLAG_RESET) == 0:
-                break
-            # step past the polling instruction and keep going
-            pc = IDLE_PC | 1
-            uc.emu_start(pc, 0, count=1)
-            pc = uc.reg_read(UC_ARM_REG_PC) | 1
+        self.stop_at_idle = True
+        try:
+            uc.emu_start(pc, 0xFFFFFFFF, count=max_insns)
+        finally:
+            self.stop_at_idle = False
+        cur = uc.reg_read(UC_ARM_REG_PC) & ~1
+        if cur != IDLE_PC:
+            raise RuntimeError("main loop stopped at %08x" % cur)
         self.main_ctx = uc.context_save()
         return self.insns - start
 
