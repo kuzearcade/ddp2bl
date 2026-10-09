@@ -104,14 +104,27 @@ local sh_pal = share(":palette")
 local sh_spr, sh_zoom = share(":igs023:spritebuffer"), share(":igs023:zoomram")
 local sh_z80 = share(":z80_mainram")
 
+local function splice(ram, addr, bytes)
+  local off = addr - 0x800000
+  return ram:sub(1, off) .. bytes .. ram:sub(off + #bytes + 1)
+end
+
+-- Canonical main RAM image, identical between the protected and the converted set:
+--  * protected set: the ARM shared RAM is folded into the relocation window (which the
+--    protected game never uses), so both sets show the same bytes there;
+--  * the converted set's private ARM-replacement state (target.hlev) is masked in both;
+--  * dead stack between target.stack_floor and the live SP is masked in both (interrupts
+--    landing at different instructions leave different garbage there; nothing reads it).
 local function canonical_mainram()
   local ram = sh_main:read_raw(0, 0x20000)
   local w = target.reloc_window
   if not reloc then
-    -- protected set: fold the ARM shared RAM into the (otherwise unused) relocation window,
-    -- so both sets produce the same canonical image
-    local off = w.base - 0x800000
-    ram = ram:sub(1, off) .. sh_arm:read_raw(0, w.size) .. ram:sub(off + w.size + 1)
+    ram = splice(ram, w.base, sh_arm:read_raw(0, w.size))
+  end
+  ram = splice(ram, target.hlev.base, string.rep("\0", target.hlev.size))
+  local sp = cpu.state["SP"].value & 0xffffff
+  if sp > target.stack_floor and sp <= 0x820000 then
+    ram = splice(ram, target.stack_floor, string.rep("\0", sp - target.stack_floor))
   end
   return ram
 end
@@ -125,8 +138,23 @@ local function vregs()
   return sh_spr:read_raw(0, sh_spr.size) .. sh_zoom:read_raw(0, sh_zoom.size) .. table.concat(t)
 end
 
+-- optional instruction trace of the 68000 (needs -debug): DDP2H_TRACE="first,last,path"
+local trace_first, trace_last, trace_path
+do
+  local t = env("DDP2H_TRACE")
+  if t then
+    local a, b, p = t:match("^(%d+),(%d+),(.+)$")
+    trace_first, trace_last, trace_path = tonumber(a), tonumber(b), p
+  end
+end
+
 fn_frame = emu.add_machine_frame_notifier(function()
   local frame = screen:frame_number()
+  if trace_first and frame == trace_first then
+    machine.debugger:command("trace " .. trace_path .. ",maincpu,noloop")
+  elseif trace_first and frame == trace_last then
+    machine.debugger:command("trace off,maincpu")
+  end
   for _, c in ipairs(cheats) do c(space, frame) end
   if state_out then
     state_out:write("FRME" .. u32(frame))
@@ -143,3 +171,6 @@ fn_frame = emu.add_machine_frame_notifier(function()
     machine:exit()
   end
 end)
+
+-- optional extra analysis script sharing this session (DDP2H_EXTRA_LUA=path)
+if env("DDP2H_EXTRA_LUA") then dofile(env("DDP2H_EXTRA_LUA")) end

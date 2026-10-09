@@ -82,6 +82,7 @@ def main():
     ap.add_argument("--perfect", action="store_true", help="per-instruction CPU interleave")
     ap.add_argument("--speedups", action="store_true", help="keep MAME's ddp2 idle-loop speedups (off by default)")
     ap.add_argument("--extra", default="", help="extra MAME arguments")
+    ap.add_argument("--trace", help="first,last frame of a 68000 instruction trace (written to <out>/trace.log)")
     a = ap.parse_args()
 
     out = os.path.abspath(a.out)
@@ -110,6 +111,9 @@ def main():
         env["DDP2_CAPTURE"] = out
     if a.machine.endswith("bl"):
         env["DDP2BL_TRAP"] = "1"
+    if a.trace:
+        env["DDP2H_TRACE"] = a.trace + "," + os.path.join(out, "trace.log")
+        a.extra += " -debug -debugger none"
 
     cmd = [a.mame, a.machine, "-rompath", a.rompath,
            "-autoboot_script", os.path.join(ROOT, "harness", "lua", "harness.lua"),

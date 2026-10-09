@@ -3,7 +3,74 @@
   "description": "DoDonPachi II - Bee Storm (World, ver. 102)",
   "source_set": "ddp2",
   "output_set": "ddp2bl",
-  "notes": "reloc window is provisional until the main RAM footprint survey completes",
-  "reloc_base": "0x81c000",
-  "reloc_size": "0x4000"
+  "source_files": {
+    "program": {
+      "name": "v102.u8",
+      "size": 2097152,
+      "crc": "5a9ea040",
+      "sha1": "51eaec46c368f7cfc5245e64896092f52b1193e0"
+    },
+    "arm_internal": {
+      "name": "ddp2_igs027a_world.bin",
+      "size": 16384,
+      "crc": "3654e20b",
+      "sha1": "e00ef1d51efe66354e3eaf4750d9d819c74ddfbf"
+    },
+    "arm_external": {
+      "name": "v100_210.u23",
+      "size": 131072,
+      "crc": "06c3dd29",
+      "sha1": "20c9479f158467fc2037dcf162b6c6be18c91d46"
+    },
+    "tiles": {
+      "name": "pgm_t1300.u21",
+      "size": 8388608,
+      "crc": "e748f0cb"
+    },
+    "sprcol0": {
+      "name": "pgm_a1300.u1",
+      "size": 8388608,
+      "crc": "fc87a405"
+    },
+    "sprcol1": {
+      "name": "pgm_a1301.u2",
+      "size": 8388608,
+      "crc": "0c8520da"
+    },
+    "sprmask": {
+      "name": "pgm_b1300.u7",
+      "size": 8388608,
+      "crc": "ef646604"
+    },
+    "samples": {
+      "name": "pgm_m1300.u5",
+      "size": 4194304,
+      "crc": "82d4015d"
+    }
+  },
+  "arm_external_decrypted_sha1": "2ba54737bab16d84d08b25e40e2ea7078a2a4b22",
+  "region_word_offset": "0x2880",
+  "reloc_base": "0x818000",
+  "reloc_size": "0x3400",
+  "hlev_base": "0x81B400",
+  "hlev_size": "0x238C",
+  "hlev_latch_offset": "0x2388",
+  "seq_var": "0x808C9C",
+  "hle_base": "0x262000",
+  "hle_max": "0x00E000",
+  "rom_sintab": "0x270000",
+  "rom_aimtab": "0x270400",
+  "rom_ctrlptr": "0x271800",
+  "rom_extrom": "0x280000",
+  "extrom_size": "0x13000",
+  "free_rom_start": "0x261EF2",
+  "code_end": "0x260000",
+  "stack_floor": "0x81E000",
+  "send_hook": "0x145922",
+  "send_exit": "0x145A04",
+  "boot_hook": "0x145A10",
+  "boot_exit": "0x145A6A",
+  "status_var": "0x80ECAA",
+  "poll_var": "0x80ECAE",
+  "echo_var": "0x808C9D"
 }

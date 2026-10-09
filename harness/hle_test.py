@@ -34,6 +34,11 @@ ARM_POOL, ARM_GLOB, ARM_RNG = 0x90, 0x2FA4, 0x3020
 
 
 def load_syms(build):
+    import re
+    for line in open(os.path.join(build, "ddp2_v102_world.lst")):
+        m = re.match(r"^(\w+)\s+A:([0-9A-F]+)$", line.strip())
+        if m:
+            SYMS[m.group(1)] = int(m.group(2), 16)
     for line in open(os.path.join(build, "target.inc")):
         p = line.split()
         if len(p) >= 3 and p[1] == "equ":
@@ -140,7 +145,7 @@ def first_diff(a, b):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("capture_dir")
-    ap.add_argument("--build", default=os.path.join(ROOT, "work", "build"))
+    ap.add_argument("--build", default=os.path.join(ROOT, "hle", "build"))
     ap.add_argument("--arm", default=os.path.join(ROOT, "work", "arm"))
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--max-report", type=int, default=20)
@@ -150,10 +155,11 @@ def main():
     internal, external, imgs = rom_images(a.arm)
     model = Model(internal, external)
     cpu = M68k(rom_lo=0x000000, rom_hi=0x4fffff)
-    cpu.load(SYMS["HLE_BASE"], open(os.path.join(a.build, "hle.bin"), "rb").read())
+    cpu.load(SYMS["HLE_BASE"], open(os.path.join(a.build, "ddp2_v102_world.bin"), "rb").read())
     for addr, data in imgs.items():
         cpu.load(addr, data)
     shw, hlev, size = SYMS["SHWIN"], SYMS["HLEV"], SYMS["SHWIN_SIZE"]
+    cpu.load(SYMS["SEND_EXIT"], bytes([0x4e, 0x75]))   # the game's epilogue: just return here
 
     st = collections.Counter()
     cyc = collections.defaultdict(list)
@@ -168,11 +174,14 @@ def main():
             continue   # boot handshake: handled by hle_boot, not by the command path
         reply, fault, mshared, mwram = model.run(shared, wram, iram, cmd, seq)
         # 68000 side
-        cpu.load(shw, hswap(shared[:size]))
+        win = bytearray(hswap(shared[:size]))
+        win[0x10:0x12] = b"\0\0"     # the patched game never writes the command word
+        cpu.load(shw, bytes(win))
         cpu.load(hlev, arm_to_hlev(wram))
         cpu.load(SYMS["SEQVAR"], bytes([seq]))
+        cpu.set_reg(2, cmd)            # D2 = command
         try:
-            c = cpu.call(SYMS["HLE_BASE"], max_cycles=5_000_000)
+            c = cpu.call(SYMS["hle_send"], max_cycles=5_000_000)
         except RuntimeError as e:
             print("frame %d cmd %02x: 68000 %s" % (ev.frame, cmd, e))
             st["bad"] += 1

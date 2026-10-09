@@ -80,6 +80,109 @@ O_OY		equ	$42
 	org	HLE_BASE
 
 ; ---------------------------------------------------------------------------
+; hle_send
+; Entered by "jmp" from the game's send(cmd) in place of
+;     its command-word store and latch post      (at the send hook)
+; with d2.l = command. The original then polls the latch once (the ARM always
+; answers before the first poll) and reaches the epilogue SEND_EXIT 266 cycles
+; after the hook. We perform the command, leave every RAM/register effect the
+; original leaves on that path, and arrive at SEND_EXIT after exactly the same
+; number of cycles for every command whose work fits (all but 11/12/13/14).
+;   effects: seq var += 1 (& $7F), echo var = new seq, status var = 0,
+;            poll counter = $270F (= $2710 - 1 poll), d0.b = new seq (upper d0
+;            unchanged), X = 0. d2 is free (restored by the epilogue).
+;   timing : cycles per instruction in the comments (MC68000 manual tables, as
+;            implemented by MAME's cycle-exact 68000 core).
+; ---------------------------------------------------------------------------
+hle_send:				; 12 (the jmp that got us here)
+	move.b	SEQVAR,d0		; 16
+	addq.b	#1,d0			;  4  (X = 0: seq <= $80)
+	andi.b	#$7f,d0			;  8
+	move.b	d0,SEQVAR		; 16
+	clr.w	STATUSVAR		; 20
+	move.w	#$270f,POLLVAR+2	; 20  (high word is always 0)
+	move.b	d0,ECHOVAR		; 16
+	move.b	d0,HLEV+LATCH		; 16  (read only by the game's error helper)
+	add.w	d2,d2			;  4
+	move.w	.tab(pc,d2.w),d2	; 14
+	jmp	.tab(pc,d2.w)		; 14  = 160; 266 - 160 - 12 (exit jmp) = 94 left
+.tab:	dc.w	snd_none-.tab, snd_none-.tab, snd_none-.tab, snd_03-.tab
+	dc.w	snd_04-.tab, snd_none-.tab, snd_none-.tab, snd_none-.tab
+	dc.w	snd_none-.tab, snd_09-.tab, snd_0a-.tab, snd_none-.tab
+	dc.w	snd_none-.tab, snd_none-.tab, snd_none-.tab, snd_none-.tab
+	dc.w	snd_none-.tab, snd_11-.tab, snd_12-.tab, snd_13-.tab
+	dc.w	snd_14-.tab, snd_none-.tab, snd_16-.tab, snd_16-.tab
+
+; PAD n: burn exactly n cycles (n even, n >= 4); clobbers N,Z,V,C (not X)
+PAD		macro
+		if ((\1)%4)=2
+		rept	((\1)-6)/4
+		nop
+		endr
+		cmp.l	d2,d2		; 6
+		else
+		rept	(\1)/4
+		nop
+		endr
+		endif
+		endm
+
+snd_none:				; 01, 02, unused: no 68k-visible effect
+	PAD	94
+	jmp	SEND_EXIT
+snd_03:	move.w	#1,SHWIN+$20		; 20  reset flag never left set
+	PAD	74
+	jmp	SEND_EXIT
+snd_04:	clr.w	SHWIN+$20		; 20  message queue always empty
+	PAD	74
+	jmp	SEND_EXIT
+snd_09:	move.l	SHWIN+$20,HLEV+GLOB	; 36
+	move.l	SHWIN+$24,HLEV+GLOB+4	; 36
+	PAD	22
+	jmp	SEND_EXIT
+snd_0a:	move.l	SHWIN+$20,HLEV+GLOB+8	; 36
+	move.l	SHWIN+$24,HLEV+GLOB+12	; 36
+	PAD	22
+	jmp	SEND_EXIT
+snd_16:	clr.w	SHWIN+$22		; 20  RAM test passed
+	PAD	74
+	jmp	SEND_EXIT
+
+; heavy commands: full register save, not padded (they run in frames with idle time)
+HEAVY		macro
+		movem.l	d0-d7/a0-a6,-(sp)
+		lea	HLEV,a5
+		lea	SHWIN,a4
+		bsr	\1
+		movem.l	(sp)+,d0-d7/a0-a6
+		jmp	SEND_EXIT
+		endm
+snd_11:	HEAVY	cmd_11
+snd_12:	HEAVY	cmd_12
+snd_13:	HEAVY	cmd_13
+snd_14:	HEAVY	cmd_14
+
+; ---------------------------------------------------------------------------
+; hle_bootcheck
+; Entered by "jmp" in place of the game's start-up latch check (it clears d2,
+; reads the latch into it and branches when ready). The ARM is always ready by then (latch
+; $81), so the original reaches BOOT_EXIT 94 cycles after the hook. We set up
+; what the firmware has prepared: the region word at shared RAM offset 0 (the
+; rest of the ARM-side state is zero at power-on, like main RAM in MAME), and
+; replay the original's local variable store.
+; ---------------------------------------------------------------------------
+hle_bootcheck:				; 12 (jmp)
+	move.l	#0,SHWIN		; 28  region word: words +0 = low, +2 = high; the immediate
+					;     is filled in at build time from the ARM internal ROM
+					;     (patch "region", tools/ddp2bl_build.py)
+	move.l	#$c350,-4(a6)		; 24
+	moveq	#0,d2			;  4
+	move.b	#$81,d2			;  8
+	PAD	6
+	jmp	BOOT_EXIT		; 12  = 94
+
+
+; ---------------------------------------------------------------------------
 ; hle_latch_write
 ; Replaces the sequence-byte post to the latch in send(). The 68k has stored the command
 ; word at SHWIN+$10 and is about to post sequence byte $808C9C.
@@ -120,29 +223,6 @@ hle_latch_write:
 	dc.w	cmd_none-.tab, cmd_11-.tab, cmd_12-.tab, cmd_13-.tab
 	dc.w	cmd_14-.tab, cmd_none-.tab, cmd_16-.tab, cmd_16-.tab
 
-; ---------------------------------------------------------------------------
-; hle_boot: called once before the game's first ASIC access; sets up the
-; state the ARM firmware has established by then (all-zero work RAM, region
-; word in shared RAM, "ready" latch).
-; ---------------------------------------------------------------------------
-hle_boot:
-	movem.l	d0/a0-a1,-(sp)
-	lea	SHWIN,a0
-	move.w	#SHWIN_SIZE/4-1,d0
-.c1:	clr.l	(a0)+
-	dbra	d0,.c1
-	lea	HLEV,a0
-	move.w	#HLEV_SIZE/4-1,d0
-.c2:	clr.l	(a0)+
-	dbra	d0,.c2
-	lea	SHWIN,a0
-	move.l	#REGION_WORD,d0		; ARM u32 at $48000000 -> 68k words +0 (low), +2 (high)
-	swap	d0
-	move.l	d0,(a0)
-	lea	HLEV,a0
-	move.b	#$81,LATCH(a0)		; ARM booted and ready
-	movem.l	(sp)+,d0/a0-a1
-	rts
 
 ; ---------------------------------------------------------------------------
 ; cheap commands (a4 = SHWIN, a5 = HLEV)
