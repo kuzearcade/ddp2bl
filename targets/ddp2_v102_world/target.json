@@ -1,0 +1,9 @@
+{
+  "name": "ddp2_v102_world",
+  "description": "DoDonPachi II - Bee Storm (World, ver. 102)",
+  "source_set": "ddp2",
+  "output_set": "ddp2bl",
+  "notes": "reloc window is provisional until the main RAM footprint survey completes",
+  "reloc_base": "0x81c000",
+  "reloc_size": "0x4000"
+}

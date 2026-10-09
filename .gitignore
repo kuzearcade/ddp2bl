@@ -1,0 +1,6 @@
+work/
+*.pyc
+__pycache__/
+*.zip
+*.bin
+!hle/**/*.bin
