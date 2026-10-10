@@ -13,21 +13,18 @@
 
 ; run the pending job (cmd 12: update, cmd 13: animate) and pack the results
 hle_run_job:
-	lea	78(a3),a3		; [cyc] block
+	lea	106(a3),a3		; [cyc] block
 	lea	HLEV,a5
 	lea	SHWIN,a4
 	move.w	PENDING(a5),d0
 	clr.w	PENDING(a5)
-	cmpi.w	#$13,d0
+	cmpi.b	#$13,d0	; $13, or $113 once cmd 14 has answered "busy"
 	beq	.anim
-	lea	28(a3),a3		; [cyc] block
+	lea	10(a3),a3		; [cyc] fall-through
 	bsr	cmd_12
-	lea	18(a3),a3		; [cyc] block
 	bra	est_results
 .anim:
-	lea	26(a3),a3		; [cyc] block
 	bsr	cmd_13
-	lea	18(a3),a3		; [cyc] block
 	bra	est_results
 
 ; cmd 11: EST reset
@@ -40,38 +37,33 @@ cmd_11:
 	clr.w	(a0)
 	lea	OBJ_SIZE(a0),a0
 	dbra	d0,.k
-	lea	24(a3),a3		; [cyc] block
+	lea	24(a3),a3		; [cyc] fall-through
 	lea	SYS(a5),a0
 	moveq	#$90/4-1,d0
 .c:
 	lea	38(a3),a3		; [cyc] block
 	clr.l	(a0)+
 	dbra	d0,.c
-	lea	52(a3),a3		; [cyc] block
+	lea	52(a3),a3		; [cyc] fall-through
 	lea	POOL(a5),a0
 	move.l	a0,S_SEARCH(a5)
 	rts
 
 ; cmd 12 / 13 job bodies (run from hle_run_job, i.e. in the game's idle loop)
 cmd_12:
-	lea	26(a3),a3		; [cyc] block
+	lea	416(a3),a3		; [cyc] block
 	bsr	est_start
-	lea	46(a3),a3		; [cyc] block
 	move.w	SYS+S_COUNT(a5),SYS+S_LATCHED(a5)
 	bsr	est_requests
-	lea	18(a3),a3		; [cyc] block
 	bra	est_update
 
 cmd_13:
-	lea	26(a3),a3		; [cyc] block
+	lea	300(a3),a3		; [cyc] block
 	bsr	est_start
-	lea	26(a3),a3		; [cyc] block
 	bsr	est_requests
-	lea	18(a3),a3		; [cyc] block
 	bra	est_animate
 
 est_start:
-	lea	176(a3),a3		; [cyc] block
 	lea	$1F00(a4),a0	; header (24 bytes) -> SYS[0..$17]
 	lea	SYS(a5),a1
 	move.l	(a0)+,(a1)+
@@ -90,80 +82,128 @@ est_start:
 ;   $1500 + 16*i : object i words 0..4 (state, type, sub, x, y)
 ;   $0EC0        : sprite words 14..18 of objects in states 1..3, packed
 ;   $0880        : ... state 5          $07E0 : ... state 4 (+ $3000 list: type, x, y)
-;   $05E0+10*id  : ... states 6/7 by item id
+;   $05E0+10*id  : ... states 6/7 (and above) by item id
 ;   $1F00        : SYS words 0..11, $1F18/$1F1C removed item list
+;
+; The object loop accounts for itself (no per-block markers): every path through one
+; iteration has a fixed cost, so the loop's total follows from how many objects took
+; each path - the same counts the ARM's run time (the cmd 14 wait) depends on.
+; Cycles per iteration without the dbra (DISP = 8+8+8+12+4+14+14 = 68, SUM = 68):
+;   state 0           8 + 10 + SUM              =  86
+;   states 1-3, 5     DISP + 78 + SUM           = 214
+;   state 4           DISP + 160 + SUM          = 296
+;   states 6, 7       DISP + 8 + 158 + SUM      = 302
+;   above 7           8+8+8+10 + 26 + 158 + SUM = 286  (the firmware's 6/7 path)
+; plus the dbra (10 per pass, 14 at the end) and one bra.s (10) leaving the loop.
 ; ---------------------------------------------------------------------------
+PK_DEAD		equ	86
+PK_SPR		equ	214
+PK_S4		equ	296
+PK_S67		equ	302
+PK_HIGH		equ	286
+
 est_results:
-	lea	68(a3),a3		; [cyc] block
+	lea	1032(a3),a3		; [cyc] block
 	lea	POOL(a5),a0
 	lea	$1500(a4),a1
 	lea	$0EC0(a4),a2
-	move.w	#$0880,d4	; state 5 block offset in SHWIN
-	move.w	#$07E0,d5	; state 4 block offset in SHWIN
+	lea	$0880(a4),a6
+	move.w	#$07E0,d4	; state 4 block offset in SHWIN
 	move.w	#$3000,d7	; state 4 list offset in SHWIN
-	move.l	#C14_CONST,d3	; ARM time of this packer x10 (for the cmd 14 wait)
-.obj:
-	lea	26(a3),a3		; [cyc] block
-	move.w	(a0),d0
-	beq	.sum
-	lea	28(a3),a3		; [cyc] block
-	cmpi.w	#4,d0
-	bcs	.s123
-	lea	20(a3),a3		; [cyc] block
-	beq	.s4
-	lea	28(a3),a3		; [cyc] block
-	cmpi.w	#5,d0
-	beq	.s5
-	; states 6/7 (and anything above): slot chosen by item id
-	lea	178(a3),a3		; [cyc] block
-	addi.l	#C14_STATE67,d3
-	moveq	#0,d1
-	move.b	O_ITEM(a0),d1
-	mulu.w	#10,d1
-	lea	$05E0(a4),a6
-	adda.l	d1,a6
-	move.l	O_SPRX(a0),(a6)+
-	move.l	O_SPRX+4(a0),(a6)+
-	move.w	O_SPRX+8(a0),(a6)
-	bra	.sum
-.s123:
-	lea	98(a3),a3		; [cyc] block
-	addi.l	#C14_STATE123,d3
-	move.l	O_SPRX(a0),(a2)+
-	move.l	O_SPRX+4(a0),(a2)+
-	move.w	O_SPRX+8(a0),(a2)+
-	bra	.sum
-.s5:
-	lea	118(a3),a3		; [cyc] block
-	addi.l	#C14_STATE5,d3
-	lea	(a4,d4.w),a6
-	move.l	O_SPRX(a0),(a6)+
-	move.l	O_SPRX+4(a0),(a6)+
-	move.w	O_SPRX+8(a0),(a6)
-	addi.w	#10,d4
-	bra	.sum
-.s4:
-	lea	164(a3),a3		; [cyc] block
-	addi.l	#C14_STATE4,d3
-	lea	(a4,d5.w),a6
-	move.l	O_SPRX(a0),(a6)+
-	move.l	O_SPRX+4(a0),(a6)+
-	move.w	O_SPRX+8(a0),(a6)
-	addi.w	#10,d5
-	move.w	O_TYPE(a0),(a4,d7.w)
-	move.l	O_X(a0),2(a4,d7.w)
-	addq.w	#6,d7
-.sum:
-	lea	108(a3),a3		; [cyc] block
-	move.l	(a0),(a1)+
-	move.l	4(a0),(a1)+
-	move.w	8(a0),(a1)
-	addq.l	#8,a1
-	lea	OBJ_SIZE(a0),a0
-	cmpa.l	#HLEV+POOL+(NOBJ-1)*OBJ_SIZE,a0
-	bls	.obj
+	moveq	#0,d2	; objects in state 4
+	moveq	#0,d3	; ... states 1-3
+	moveq	#0,d5	; ... state 5
+	moveq	#0,d6	; ... states 6/7 (low word), above 7 (high word)
+	moveq	#NOBJ-1,d1
+	; @cyc-off
+.obj:	move.w	(a0),d0			;  8
+	beq.s	.sum			; 10 / 8
+	cmpi.w	#7,d0			;  8
+	bhi.w	.high			; 10 / 12
+	add.w	d0,d0			;  4
+	move.w	.tab-2(pc,d0.w),d0	; 14
+	jmp	.tab(pc,d0.w)		; 14
+.tab:	dc.w	.s123-.tab, .s123-.tab, .s123-.tab, .s4-.tab, .s5-.tab, .s67-.tab, .s67-.tab
+.sum:	move.l	(a0)+,(a1)+		; 20
+	move.l	(a0)+,(a1)+		; 20
+	move.w	(a0),(a1)		; 12
+	lea	OBJ_SIZE-8(a0),a0	;  8
+	lea	8(a1),a1		;  8  = 68
+	dbra	d1,.obj			; 10 / 14
+	bra.s	.out			; 10
+.s123:	addq.w	#1,d3			;  4
+	move.l	O_SPRX(a0),(a2)+	; 24
+	move.l	O_SPRX+4(a0),(a2)+	; 24
+	move.w	O_SPRX+8(a0),(a2)+	; 16
+	bra.s	.sum			; 10  = 78
+.s5:	addq.w	#1,d5			;  4
+	move.l	O_SPRX(a0),(a6)+	; 24
+	move.l	O_SPRX+4(a0),(a6)+	; 24
+	move.w	O_SPRX+8(a0),(a6)+	; 16
+	bra.s	.sum			; 10  = 78
+.s4:	addq.w	#1,d2			;  4
+	move.l	O_SPRX(a0),0(a4,d4.w)	; 30
+	move.l	O_SPRX+4(a0),4(a4,d4.w)	; 30
+	move.w	O_SPRX+8(a0),8(a4,d4.w)	; 22
+	addi.w	#10,d4			;  8
+	move.w	O_TYPE(a0),0(a4,d7.w)	; 22
+	move.l	O_X(a0),2(a4,d7.w)	; 30
+	addq.w	#6,d7			;  4
+	bra.s	.sum			; 10  = 160
+.s67:	addq.w	#1,d6			;  4
+	moveq	#0,d0			;  4  = 8
+.item:	move.b	O_ITEM(a0),d0		; 12
+	mulu.w	#10,d0			; 46
+	addi.w	#$05E0,d0		;  8
+	move.l	O_SPRX(a0),0(a4,d0.w)	; 30
+	move.l	O_SPRX+4(a0),4(a4,d0.w)	; 30
+	move.w	O_SPRX+8(a0),8(a4,d0.w)	; 22
+	bra.s	.sum			; 10  = 158
+.high:	swap	d6			;  4
+	addq.w	#1,d6			;  4
+	swap	d6			;  4
+	moveq	#0,d0			;  4
+	bra.s	.item			; 10  = 26
+.out:
+	; @cyc-on
+	; loop cycles = NOBJ*PK_DEAD + (NOBJ-1)*10 + 14 + 10 + n(1-3,5)*(PK_SPR-PK_DEAD)
+	;             + n4*(PK_S4-PK_DEAD) + n67*(PK_S67-PK_DEAD) + nhigh*(PK_HIGH-PK_DEAD)
+	lea	NOBJ*PK_DEAD+(NOBJ-1)*10+14+10(a3),a3	; @cyc-adjust
+	move.w	d3,d0
+	add.w	d5,d0
+	mulu.w	#PK_SPR-PK_DEAD,d0
+	adda.l	d0,a3	; @cyc-adjust
+	move.w	d2,d0
+	mulu.w	#PK_S4-PK_DEAD,d0
+	adda.l	d0,a3	; @cyc-adjust
+	move.w	d6,d0
+	mulu.w	#PK_S67-PK_DEAD,d0
+	adda.l	d0,a3	; @cyc-adjust
+	swap	d6
+	move.w	d6,d0
+	mulu.w	#PK_HIGH-PK_DEAD,d0
+	adda.l	d0,a3	; @cyc-adjust
 
-	lea	234(a3),a3		; [cyc] block
+	; ARM time of this packer x10 (for the cmd 14 wait); objects above state 7 take
+	; the firmware's 6/7 path
+	moveq	#0,d0
+	move.w	d6,d0	; nhigh (d6 is still swapped)
+	swap	d6
+	add.w	d6,d0	; + n67
+	mulu.w	#C14_STATE67,d0
+	move.l	d0,d1
+	move.w	d3,d0
+	mulu.w	#C14_STATE123,d0
+	add.l	d0,d1
+	move.w	d2,d0
+	mulu.w	#C14_STATE4,d0
+	add.l	d0,d1
+	move.w	d5,d0
+	mulu.w	#C14_STATE5,d0
+	add.l	d0,d1
+	addi.l	#C14_CONST,d1
+	move.l	d1,d3
+
 	lea	SYS(a5),a0	; header back to the 68k
 	lea	$1F00(a4),a1
 	move.l	(a0)+,(a1)+
@@ -173,26 +213,68 @@ est_results:
 	move.l	(a0)+,(a1)+
 	move.l	(a0)+,(a1)+
 	move.w	SYS+S_REMOVED_N(a5),d0
+	beq	.norem
+	lea	84(a3),a3		; [cyc] fall-through
 	mulu.w	#C14_REMOVED,d0
 	add.l	d0,d3
-	; extra polls E = ceil((D - first poll) / poll period), all x10 (no DIVU: its timing
-	; is data dependent; this loop's cost is accounted block by block)
+	addi.l	#C14_REMOVED_FIRST,d3
+.norem:
+	; extra polls E = ceil((D - first poll) / poll period), all x10; E < 256.
+	; Binary long division in 8 fixed steps (no DIVU: its timing is data dependent).
 	subi.l	#FIRST_POLL_X10-(POLL_PERIOD_X10-1),d3
 	moveq	#0,d1
-.div:
-	lea	32(a3),a3		; [cyc] block
-	cmpi.l	#POLL_PERIOD_X10,d3
-	bcs	.dived
-	lea	40(a3),a3		; [cyc] block
-	subi.l	#POLL_PERIOD_X10,d3
-	addq.w	#1,d1
-	bra	.div
-.dived:
-	lea	42(a3),a3		; [cyc] block
+	cmpi.l	#(POLL_PERIOD_X10<<7),d3
+	bcs	.d_1
+	lea	34(a3),a3		; [cyc] fall-through
+	subi.l	#(POLL_PERIOD_X10<<7),d3
+	addi.w	#(1<<7),d1
+.d_1:
+	cmpi.l	#(POLL_PERIOD_X10<<6),d3
+	bcs	.d_2
+	lea	34(a3),a3		; [cyc] fall-through
+	subi.l	#(POLL_PERIOD_X10<<6),d3
+	addi.w	#(1<<6),d1
+.d_2:
+	cmpi.l	#(POLL_PERIOD_X10<<5),d3
+	bcs	.d_3
+	lea	34(a3),a3		; [cyc] fall-through
+	subi.l	#(POLL_PERIOD_X10<<5),d3
+	addi.w	#(1<<5),d1
+.d_3:
+	cmpi.l	#(POLL_PERIOD_X10<<4),d3
+	bcs	.d_4
+	lea	34(a3),a3		; [cyc] fall-through
+	subi.l	#(POLL_PERIOD_X10<<4),d3
+	addi.w	#(1<<4),d1
+.d_4:
+	cmpi.l	#(POLL_PERIOD_X10<<3),d3
+	bcs	.d_5
+	lea	34(a3),a3		; [cyc] fall-through
+	subi.l	#(POLL_PERIOD_X10<<3),d3
+	addi.w	#(1<<3),d1
+.d_5:
+	cmpi.l	#(POLL_PERIOD_X10<<2),d3
+	bcs	.d_6
+	lea	34(a3),a3		; [cyc] fall-through
+	subi.l	#(POLL_PERIOD_X10<<2),d3
+	addi.w	#(1<<2),d1
+.d_6:
+	cmpi.l	#(POLL_PERIOD_X10<<1),d3
+	bcs	.d_7
+	lea	34(a3),a3		; [cyc] fall-through
+	subi.l	#(POLL_PERIOD_X10<<1),d3
+	addi.w	#(1<<1),d1
+.d_7:
+	cmpi.l	#(POLL_PERIOD_X10<<0),d3
+	bcs	.d_8
+	lea	34(a3),a3		; [cyc] fall-through
+	subi.l	#(POLL_PERIOD_X10<<0),d3
+	addi.w	#(1<<0),d1
+.d_8:
 	move.w	d1,E14(a5)
 	move.w	SYS+S_REMOVED_N(a5),d0
 	beq	.done
-	lea	42(a3),a3		; [cyc] block
+	lea	26(a3),a3		; [cyc] fall-through
 	move.w	d0,$1F18(a4)
 	lea	SYS+S_REMOVED(a5),a0
 	lea	$1F1C(a4),a1
@@ -201,9 +283,8 @@ est_results:
 	lea	30(a3),a3		; [cyc] block
 	move.w	(a0)+,(a1)+
 	dbra	d0,.rm
-	lea	12(a3),a3		; [cyc] fall-through
+	lea	28(a3),a3		; [cyc] fall-through
 .done:
-	lea	24(a3),a3		; [cyc] block
 	rts
 ; ---------------------------------------------------------------------------
 ; EST request processing (ARM $2280) and spawn/control handlers ($3C90 table)
@@ -214,28 +295,25 @@ est_results:
 ; request word n is at 2n(a2)
 
 est_requests:
-	lea	46(a3),a3		; [cyc] block
 	lea	$1F80(a4),a2
 	move.w	SYS+S_COUNT(a5),REQN(a5)
 	beq	.done
-	lea	10(a3),a3		; [cyc] fall-through
+	lea	-22(a3),a3		; [cyc] fall-through
 .loop:
-	lea	34(a3),a3		; [cyc] block
+	lea	68(a3),a3		; [cyc] block
 	move.w	(a2),d0
 	cmpi.w	#14,d0
 	bhi	.next	; firmware asserts (hang); never happens
-	lea	50(a3),a3		; [cyc] block
+	lea	50(a3),a3		; [cyc] fall-through
 	add.w	d0,d0
 	move.w	.tab(pc,d0.w),d0
 	jsr	.tab(pc,d0.w)
 .next:
-	lea	42(a3),a3		; [cyc] block
 	lea	24(a2),a2
 	subq.w	#1,REQN(a5)
 	bne	.loop
-	lea	10(a3),a3		; [cyc] fall-through
+	lea	42(a3),a3		; [cyc] fall-through
 .done:
-	lea	40(a3),a3		; [cyc] block
 	clr.w	SYS+S_COUNT(a5)
 	rts
 .tab:
@@ -250,29 +328,25 @@ est_requests:
 
 ; find_free: a0 = first free slot at or after the search pointer (wrapping)
 find_free:
-	lea	32(a3),a3		; [cyc] block
 	movea.l	SYS+S_SEARCH(a5),a0
 	lea	POOL+(NOBJ-1)*OBJ_SIZE(a5),a1
 .l:
-	lea	24(a3),a3		; [cyc] block
+	lea	58(a3),a3		; [cyc] block
 	cmpa.l	a1,a0
 	bls	.c
-	lea	18(a3),a3		; [cyc] block
+	lea	18(a3),a3		; [cyc] fall-through
 	lea	POOL(a5),a0
 .c:
-	lea	26(a3),a3		; [cyc] block
 	tst.w	(a0)
 	beq	.f
-	lea	28(a3),a3		; [cyc] block
+	lea	12(a3),a3		; [cyc] fall-through
 	lea	OBJ_SIZE(a0),a0
 	bra	.l
 .f:
-	lea	24(a3),a3		; [cyc] block
 	rts
 
 ; slot_by_index: a0 = POOL + d0.w * $44
 slot_by_index:
-	lea	86(a3),a3		; [cyc] block
 	mulu.w	#OBJ_SIZE,d0
 	lea	POOL(a5),a0
 	adda.l	d0,a0
@@ -282,16 +356,13 @@ slot_by_index:
 ; set_acc: same, writing O_AX/O_AY. Only d2, d3 and a6 are clobbered.
 ; v = (sin * speed) rounded toward zero >> 8 (s16 x u16 product, as the ARM)
 set_acc:
-	lea	26(a3),a3		; [cyc] block
 	lea	O_AX(a0),a6
 	bra	set_vxy
 set_vel:
-	lea	16(a3),a3		; [cyc] block
 	lea	O_VX(a0),a6
 set_vxy:
 	; MULS timing depends on its source operand: the source here is always a sine
 	; table entry, so the data-dependent part (2n per product) comes from MULCOST.
-	lea	194(a3),a3		; [cyc] block
 	move.l	a6,-(sp)	; destination
 	move.w	d0,d2
 	add.w	d2,d2
@@ -306,27 +377,24 @@ set_vxy:
 	muls.w	2(a6),d3	; @muls-dyn  speed * b
 	tst.w	d1
 	bmi	.big
-	lea	24(a3),a3		; [cyc] block
+	lea	-26(a3),a3		; [cyc] fall-through
 	tst.l	d2
 	bpl	.p1
-	lea	26(a3),a3		; [cyc] block
+	lea	26(a3),a3		; [cyc] fall-through
 	addi.l	#$ff,d2
 .p1:
-	lea	46(a3),a3		; [cyc] block
 	asr.l	#8,d2
 	tst.l	d3
 	bpl	.p2
-	lea	26(a3),a3		; [cyc] block
+	lea	26(a3),a3		; [cyc] fall-through
 	addi.l	#$ff,d3
 .p2:
-	lea	76(a3),a3		; [cyc] block
 	asr.l	#8,d3
 	movea.l	(sp)+,a6
 	move.w	d2,(a6)+
 	move.w	d3,(a6)
 	rts
 .big:
-	lea	58(a3),a3		; [cyc] block
 	swap	d2
 	add.w	(a6),d2
 	swap	d2
@@ -335,17 +403,15 @@ set_vxy:
 	swap	d3
 	tst.l	d2
 	bpl	.b1
-	lea	26(a3),a3		; [cyc] block
+	lea	26(a3),a3		; [cyc] fall-through
 	addi.l	#$ff,d2
 .b1:
-	lea	46(a3),a3		; [cyc] block
 	asr.l	#8,d2
 	tst.l	d3
 	bpl	.b2
-	lea	26(a3),a3		; [cyc] block
+	lea	26(a3),a3		; [cyc] fall-through
 	addi.l	#$ff,d3
 .b2:
-	lea	76(a3),a3		; [cyc] block
 	asr.l	#8,d3
 	movea.l	(sp)+,a6
 	move.w	d2,(a6)+
@@ -354,44 +420,38 @@ set_vxy:
 
 ; halve_vanish: object a0 -> state 3 (vanish), wait 6, x-5, y-8, v /= 2 (toward 0)
 halve_vanish:
-	lea	90(a3),a3		; [cyc] block
 	move.w	#3,(a0)
 	move.w	#6,O_WAIT(a0)
 	subq.w	#5,O_X(a0)
 	subq.w	#8,O_Y(a0)
 	move.w	O_VX(a0),d0
 	bpl	.a
-	lea	14(a3),a3		; [cyc] block
+	lea	14(a3),a3		; [cyc] fall-through
 	addq.w	#1,d0
 .a:
-	lea	50(a3),a3		; [cyc] block
 	asr.w	#1,d0
 	move.w	d0,O_VX(a0)
 	move.w	O_VY(a0),d0
 	bpl	.b
-	lea	14(a3),a3		; [cyc] block
+	lea	14(a3),a3		; [cyc] fall-through
 	addq.w	#1,d0
 .b:
-	lea	44(a3),a3		; [cyc] block
 	asr.w	#1,d0
 	move.w	d0,O_VY(a0)
 	rts
 
 ; vanish_3a4 / vanish_40c: category counters + halve_vanish
 vanish_3a4:
-	lea	50(a3),a3		; [cyc] block
 	subq.w	#1,SYS+$06(a5)
 	addq.w	#1,SYS+$08(a5)
 	bra	halve_vanish
 vanish_40c:
-	lea	50(a3),a3		; [cyc] block
 	subq.w	#1,SYS+$04(a5)
 	addq.w	#1,SYS+$08(a5)
 	bra	halve_vanish
 
 ; push_removed: append item id of a0 to the removed list
 push_removed:
-	lea	86(a3),a3		; [cyc] block
 	move.w	SYS+S_REMOVED_N(a5),d0
 	addq.w	#1,SYS+S_REMOVED_N(a5)
 	add.w	d0,d0
@@ -403,29 +463,27 @@ push_removed:
 ; anim_entry: a1 = T_ANIM + O_ABASE*8 + d0.w*8 ; copy 4 sprite words, set |$1800
 copy_anim_1800:
 	; a1 = T_ANIM + 8*O_ABASE + 8*frame(d0.w), 32-bit arithmetic like the ARM
-	lea	192(a3),a3		; [cyc] block
 	moveq	#0,d1
 	move.w	O_ABASE(a0),d1
+	andi.l	#$ffff,d0
+	add.l	d0,d1
 	lsl.l	#3,d1
 	lea	T_ANIM,a1
 	adda.l	d1,a1
-	moveq	#0,d1
-	move.w	d0,d1
-	lsl.l	#3,d1
-	adda.l	d1,a1
-	move.l	(a1)+,O_SPR(a0)
+	move.w	(a1)+,d0
+	andi.w	#$e0ff,d0
+	ori.w	#$1800,d0
+	move.w	d0,O_SPR(a0)
+	move.w	(a1)+,O_SPR+2(a0)
 	move.l	(a1),O_SPR+4(a0)
-	andi.w	#$e0ff,O_SPR(a0)
-	ori.w	#$1800,O_SPR(a0)
 	rts
 
 ; ---------------------------------------------------------------------------
 ; id 0: scripted bullet (ARM $2064)
 ; ---------------------------------------------------------------------------
 sp_bullet:
-	lea	26(a3),a3		; [cyc] block
+	lea	1324(a3),a3		; [cyc] block
 	bsr	find_free
-	lea	270(a3),a3		; [cyc] block
 	move.w	#1,(a0)
 	moveq	#0,d0
 	move.b	9(a2),d0	; angle = low byte of request word 4
@@ -444,7 +502,7 @@ sp_bullet:
 	move.w	O_P1E(a0),d3
 	tst.b	O_DIRANIM(a0)
 	beq	.nd
-	lea	50(a3),a3		; [cyc] block
+	lea	50(a3),a3		; [cyc] fall-through
 	move.w	d0,d4
 	addq.w	#4,d4
 	andi.w	#$ff,d4
@@ -453,7 +511,6 @@ sp_bullet:
 	add.w	d4,d4
 	add.w	d4,d3
 .nd:
-	lea	240(a3),a3		; [cyc] block
 	move.w	d3,O_ABASE(a0)
 	clr.w	O_FLAG(a0)
 	move.w	22(a2),d3
@@ -470,37 +527,32 @@ sp_bullet:
 	move.w	4(a2),O_X(a0)
 	move.w	6(a2),O_Y(a0)
 	bsr	set_vel	; d0 = angle, d1 = speed
-	lea	38(a3),a3		; [cyc] block
 	move.w	12(a2),d1
 	bsr	set_acc
-	lea	48(a3),a3		; [cyc] block
 	lea	OBJ_SIZE(a0),a1
 	move.l	a1,SYS+S_SEARCH(a5)
 	rts
 
 ; id 1: free slot REQ1 ($1F8C)
 sp_kill:
-	lea	38(a3),a3		; [cyc] block
+	lea	144(a3),a3		; [cyc] block
 	move.w	2(a2),d0
 	bsr	slot_by_index
-	lea	36(a3),a3		; [cyc] block
 	clr.w	(a0)
 	rts
 
 ; id 2: vanish slot REQ1 ($1FA8)
 sp_vanish:
-	lea	38(a3),a3		; [cyc] block
+	lea	286(a3),a3		; [cyc] block
 	move.w	2(a2),d0
 	bsr	slot_by_index
-	lea	18(a3),a3		; [cyc] block
 	bra	halve_vanish
 
 ; id 3: set sub type of slot REQ1 to REQ6 ($2004)
 sp_setsub:
-	lea	38(a3),a3		; [cyc] block
+	lea	152(a3),a3		; [cyc] block
 	move.w	2(a2),d0
 	bsr	slot_by_index
-	lea	44(a3),a3		; [cyc] block
 	move.w	12(a2),O_SUB(a0)
 	rts
 
@@ -510,16 +562,15 @@ sp_clearlow:
 	lea	POOL(a5),a0
 	moveq	#NOBJ-1,d1
 .l:
-	lea	30(a3),a3		; [cyc] block
+	lea	48(a3),a3		; [cyc] block
 	cmpi.w	#3,(a0)
 	bcc	.n
-	lea	22(a3),a3		; [cyc] block
+	lea	22(a3),a3		; [cyc] fall-through
 	clr.w	(a0)
 .n:
-	lea	26(a3),a3		; [cyc] block
 	lea	OBJ_SIZE(a0),a0
 	dbra	d1,.l
-	lea	28(a3),a3		; [cyc] block
+	lea	28(a3),a3		; [cyc] fall-through
 	rts
 
 ; id 5: vanish every scripted bullet ($1D80)
@@ -528,16 +579,15 @@ sp_vanishall:
 	lea	POOL(a5),a0
 	moveq	#NOBJ-1,d5
 .l:
-	lea	30(a3),a3		; [cyc] block
+	lea	48(a3),a3		; [cyc] block
 	cmpi.w	#2,(a0)
 	bne	.n
-	lea	28(a3),a3		; [cyc] block
+	lea	188(a3),a3		; [cyc] fall-through
 	bsr	halve_vanish
 .n:
-	lea	26(a3),a3		; [cyc] block
 	lea	OBJ_SIZE(a0),a0
 	dbra	d5,.l
-	lea	28(a3),a3		; [cyc] block
+	lea	28(a3),a3		; [cyc] fall-through
 	rts
 
 ; id 6: vanish scripted bullets of type REQ1 ($1DF0)
@@ -547,19 +597,18 @@ sp_vanishtype:
 	lea	POOL(a5),a0
 	moveq	#NOBJ-1,d5
 .l:
-	lea	30(a3),a3		; [cyc] block
+	lea	48(a3),a3		; [cyc] block
 	cmpi.w	#2,(a0)
 	bne	.n
-	lea	32(a3),a3		; [cyc] block
+	lea	32(a3),a3		; [cyc] fall-through
 	cmp.w	O_TYPE(a0),d7
 	bne	.n
-	lea	28(a3),a3		; [cyc] block
+	lea	230(a3),a3		; [cyc] fall-through
 	bsr	vanish_3a4
 .n:
-	lea	26(a3),a3		; [cyc] block
 	lea	OBJ_SIZE(a0),a0
 	dbra	d5,.l
-	lea	28(a3),a3		; [cyc] block
+	lea	28(a3),a3		; [cyc] fall-through
 	rts
 
 ; id 7: every scripted bullet becomes falling debris, appearing ones vanish ($1E34)
@@ -584,18 +633,17 @@ sp_todebris:
 	lea	POOL(a5),a0
 	moveq	#NOBJ-1,d5
 .l:
-	lea	34(a3),a3		; [cyc] block
+	lea	528(a3),a3		; [cyc] block
 	move.w	(a0),d0
 	cmpi.w	#2,d0
 	beq	.conv
-	lea	28(a3),a3		; [cyc] block
+	lea	-448(a3),a3		; [cyc] fall-through
 	cmpi.w	#1,d0
 	bne	.n
-	lea	32(a3),a3		; [cyc] block
+	lea	32(a3),a3		; [cyc] fall-through
 	clr.w	(a0)
 	bra	.n
 .conv:
-	lea	102(a3),a3		; [cyc] block
 	move.w	#5,(a0)
 	move.w	d7,O_TYPE(a0)
 	move.w	d3,O_AFRAME(a0)
@@ -605,21 +653,18 @@ sp_todebris:
 	move.w	d1,SYS+S_CNT82(a5)
 	andi.w	#3,d1
 	bne	.anim
-	lea	56(a3),a3		; [cyc] block
+	lea	-176(a3),a3		; [cyc] fall-through
 	move.w	SYS+S_CNT84(a5),d3
 	addq.w	#1,d3
 	move.w	d3,SYS+S_CNT84(a5)
 	andi.w	#$f,d3
 	bra	.set
 .anim:
-	lea	54(a3),a3		; [cyc] block
 	movem.l	d1/d2,-(sp)
 	move.w	d3,d0
 	bsr	copy_anim_1800	; uses O_ABASE (= d2) + frame d0
-	lea	28(a3),a3		; [cyc] block
 	movem.l	(sp)+,d1/d2
 .set:
-	lea	158(a3),a3		; [cyc] block
 	move.w	d1,O_ACNT(a0)
 	move.w	d1,d0
 	lsl.w	#6,d0
@@ -633,15 +678,13 @@ sp_todebris:
 	move.l	d4,O_OX(a0)
 	move.w	TMP(a5),O_FLAG(a0)
 .n:
-	lea	26(a3),a3		; [cyc] block
 	lea	OBJ_SIZE(a0),a0
 	dbra	d5,.l
-	lea	28(a3),a3		; [cyc] block
+	lea	28(a3),a3		; [cyc] fall-through
 	rts
 
 ; debris4_init: a0 = slot, d7 = type, d4 = x:y, d2 = animation base
 debris4_init:
-	lea	148(a3),a3		; [cyc] block
 	move.w	#4,(a0)
 	move.w	d7,O_TYPE(a0)
 	move.w	SYS+S_CNT86(a5),d0
@@ -656,10 +699,9 @@ debris4_init:
 	move.w	2(a1,d0.w),d0
 	btst	#0,d1
 	beq	.e
-	lea	14(a3),a3		; [cyc] block
+	lea	14(a3),a3		; [cyc] fall-through
 	neg.w	d0
 .e:
-	lea	136(a3),a3		; [cyc] block
 	move.w	d0,O_VY(a0)
 	move.l	d4,O_X(a0)
 	clr.l	O_AX(a0)
@@ -671,7 +713,7 @@ debris4_init:
 
 ; id 8: REQ6 bouncing debris pieces ($1BB0)
 sp_multidebris:
-	lea	94(a3),a3		; [cyc] block
+	lea	126(a3),a3		; [cyc] block
 	move.w	2(a2),d7
 	move.l	4(a2),d4	; x:y
 	move.w	d7,d2
@@ -681,38 +723,33 @@ sp_multidebris:
 	movea.l	SYS+S_SEARCH(a5),a0
 	move.w	12(a2),d5
 	beq	.done
-	lea	14(a3),a3		; [cyc] block
+	lea	-18(a3),a3		; [cyc] fall-through
 	subq.w	#1,d5
 .each:
-	lea	32(a3),a3		; [cyc] block
+	lea	354(a3),a3		; [cyc] block
 	cmpa.l	#HLEV+POOL+(NOBJ-1)*OBJ_SIZE,a0
 	bls	.c
-	lea	18(a3),a3		; [cyc] block
+	lea	18(a3),a3		; [cyc] fall-through
 	lea	POOL(a5),a0
 .c:
-	lea	26(a3),a3		; [cyc] block
 	tst.w	(a0)
 	beq	.f
-	lea	28(a3),a3		; [cyc] block
+	lea	-276(a3),a3		; [cyc] fall-through
 	lea	OBJ_SIZE(a0),a0
 	bra	.each
 .f:
-	lea	26(a3),a3		; [cyc] block
 	bsr	debris4_init
-	lea	26(a3),a3		; [cyc] block
 	lea	OBJ_SIZE(a0),a0
 	dbra	d5,.each
-	lea	12(a3),a3		; [cyc] fall-through
+	lea	44(a3),a3		; [cyc] fall-through
 .done:
-	lea	40(a3),a3		; [cyc] block
 	move.l	a0,SYS+S_SEARCH(a5)
 	rts
 
 ; id 9: one bouncing debris piece ($1AE8)
 sp_debris:
-	lea	26(a3),a3		; [cyc] block
+	lea	420(a3),a3		; [cyc] block
 	bsr	find_free
-	lea	70(a3),a3		; [cyc] block
 	move.w	2(a2),d7
 	move.l	4(a2),d4
 	move.w	d7,d2
@@ -720,16 +757,14 @@ sp_debris:
 	add.w	d2,d2
 	add.w	d2,d2
 	bsr	debris4_init
-	lea	48(a3),a3		; [cyc] block
 	lea	OBJ_SIZE(a0),a1
 	move.l	a1,SYS+S_SEARCH(a5)
 	rts
 
 ; id 10: falling debris ($189C)
 sp_falling:
-	lea	26(a3),a3		; [cyc] block
+	lea	690(a3),a3		; [cyc] block
 	bsr	find_free
-	lea	162(a3),a3		; [cyc] block
 	move.w	#5,(a0)
 	move.w	2(a2),d7
 	move.w	d7,O_TYPE(a0)
@@ -745,18 +780,15 @@ sp_falling:
 	move.w	d1,SYS+S_CNT82(a5)
 	andi.w	#3,d1
 	bne	.anim
-	lea	36(a3),a3		; [cyc] block
+	lea	-168(a3),a3		; [cyc] fall-through
 	addq.w	#1,SYS+S_CNT84(a5)
 	bra	.set
 .anim:
-	lea	38(a3),a3		; [cyc] block
 	move.w	d3,d0
 	move.w	d1,-(sp)
 	bsr	copy_anim_1800
-	lea	16(a3),a3		; [cyc] block
 	move.w	(sp)+,d1
 .set:
-	lea	290(a3),a3		; [cyc] block
 	move.l	4(a2),O_X(a0)
 	move.w	d1,d0
 	lsl.w	#6,d0
@@ -783,9 +815,8 @@ sp_falling:
 
 ; id 11: item, state 6 ($1C94)
 sp_item6:
-	lea	26(a3),a3		; [cyc] block
+	lea	266(a3),a3		; [cyc] block
 	bsr	find_free
-	lea	224(a3),a3		; [cyc] block
 	move.w	#6,(a0)
 	move.w	2(a2),d0
 	move.w	d0,O_TYPE(a0)
@@ -805,9 +836,8 @@ sp_item6:
 
 ; id 12: item, state 7 ($19CC)
 sp_item7:
-	lea	26(a3),a3		; [cyc] block
+	lea	452(a3),a3		; [cyc] block
 	bsr	find_free
-	lea	230(a3),a3		; [cyc] block
 	move.w	#7,(a0)
 	move.w	2(a2),d7
 	move.w	d7,O_TYPE(a0)
@@ -828,11 +858,10 @@ sp_item7:
 	andi.w	#3,d1
 	move.w	d1,O_ACNT(a0)
 	beq	.na
-	lea	32(a3),a3		; [cyc] block
+	lea	198(a3),a3		; [cyc] fall-through
 	move.w	d3,d0
 	bsr	copy_anim_1800
 .na:
-	lea	188(a3),a3		; [cyc] block
 	move.l	4(a2),O_X(a0)
 	move.w	d7,d0
 	add.w	d0,d0
@@ -850,16 +879,14 @@ sp_item7:
 
 ; id 13: remove slot REQ1, logging items ($2020)
 sp_removeitem:
-	lea	38(a3),a3		; [cyc] block
+	lea	166(a3),a3		; [cyc] block
 	move.w	2(a2),d0
 	bsr	slot_by_index
-	lea	30(a3),a3		; [cyc] block
 	cmpi.w	#5,(a0)
 	bls	.k
-	lea	28(a3),a3		; [cyc] block
+	lea	106(a3),a3		; [cyc] fall-through
 	bsr	push_removed
 .k:
-	lea	36(a3),a3		; [cyc] block
 	clr.w	(a0)
 	rts
 
@@ -869,16 +896,15 @@ sp_stopbounce:
 	lea	POOL(a5),a0
 	moveq	#NOBJ-1,d1
 .l:
-	lea	30(a3),a3		; [cyc] block
+	lea	48(a3),a3		; [cyc] block
 	cmpi.w	#4,(a0)
 	bne	.n
-	lea	26(a3),a3		; [cyc] block
+	lea	26(a3),a3		; [cyc] fall-through
 	clr.w	O_TIMER(a0)
 .n:
-	lea	26(a3),a3		; [cyc] block
 	lea	OBJ_SIZE(a0),a0
 	dbra	d1,.l
-	lea	28(a3),a3		; [cyc] block
+	lea	28(a3),a3		; [cyc] fall-through
 	rts
 ; ---------------------------------------------------------------------------
 ; EST engine: per-frame update (ARM $55C) and animation-only pass (ARM $1730)
@@ -892,73 +918,77 @@ sp_stopbounce:
 
 ; SPRXY x, y, ox, oy, t : sprite position words
 
+; The object loop accounts for itself: every slot is charged UPD_DEAD up front, a live
+; slot adds UPD_LIVE-UPD_DEAD (its state routine accounts for itself, rts included), a
+; slot above state 7 (skipped, as by the firmware) adds UPD_HIGH-UPD_DEAD.
+;   dead   8 + 10 + 8 + 14 + 10                               = 50
+;   live   8 + 8 + 8 + 8 + 8 + 4 + 14 + 22 + 8 + 14 + 10        = 112
+;   high   8 + 8 + 8 + 10 + 8 + 10 + 8 + 14 + 10               = 84
+; plus the entry bra.s (10), minus 2 for the last bls.s (not taken: 8).
+UPD_DEAD	equ	50
+UPD_LIVE	equ	112
+UPD_HIGH	equ	84
+
 est_update:
-	lea	28(a3),a3		; [cyc] block
 	move.w	GLOB+14(a5),d7
 	lea	POOL(a5),a0
-.loop:
-	lea	26(a3),a3		; [cyc] block
-	move.w	(a0),d0
-	beq	.next
-	lea	28(a3),a3		; [cyc] block
-	cmpi.w	#7,d0
-	bhi	.next
-	lea	50(a3),a3		; [cyc] block
-	add.w	d0,d0
-	move.w	.tab-2(pc,d0.w),d0
-	jsr	.tab(pc,d0.w)
-.next:
-	lea	40(a3),a3		; [cyc] block
-	lea	OBJ_SIZE(a0),a0
-	cmpa.l	#HLEV+POOL+(NOBJ-1)*OBJ_SIZE,a0
-	bls	.loop
-	lea	32(a3),a3		; [cyc] block
+	lea	NOBJ*UPD_DEAD+10-2(a3),a3	; @cyc-adjust
+	; @cyc-off
+	bra.s	.loop			; 10
+.high:	lea	UPD_HIGH-UPD_DEAD(a3),a3	;  8  @cyc-adjust
+	bra.s	.next			; 10
+.loop:	move.w	(a0),d0			;  8
+	beq.s	.next			; 10 / 8
+	cmpi.w	#7,d0			;  8
+	bhi.s	.high			; 10 / 8
+	lea	UPD_LIVE-UPD_DEAD(a3),a3	;  8  @cyc-adjust
+	add.w	d0,d0			;  4
+	move.w	.tab-2(pc,d0.w),d0	; 14
+	jsr	.tab(pc,d0.w)		; 22
+.next:	lea	OBJ_SIZE(a0),a0		;  8
+	cmpa.l	#HLEV+POOL+(NOBJ-1)*OBJ_SIZE,a0	; 14
+	bls.s	.loop			; 10 / 8
+	; @cyc-on
 	tst.w	SYS+$12(a5)
 	beq	.t1
-	lea	26(a3),a3		; [cyc] block
+	lea	26(a3),a3		; [cyc] fall-through
 	subq.w	#1,SYS+$12(a5)
 .t1:
-	lea	30(a3),a3		; [cyc] block
 	tst.w	SYS+$14(a5)
 	beq	.t2
-	lea	26(a3),a3		; [cyc] block
+	lea	26(a3),a3		; [cyc] fall-through
 	subq.w	#1,SYS+$14(a5)
 .t2:
-	lea	40(a3),a3		; [cyc] block
 	clr.w	SYS+S_BUSY(a5)
 	rts
 .tab:
 	dc.w	st1-.tab, st2-.tab, st3-.tab, st4-.tab, st5-.tab, st6-.tab, st7-.tab
 
 est_animate:
-	lea	16(a3),a3		; [cyc] block
 	lea	POOL(a5),a0
 .loop:
-	lea	34(a3),a3		; [cyc] block
+	lea	66(a3),a3		; [cyc] block
 	move.w	(a0),d0
 	cmpi.w	#4,d0
 	bcs	.next
-	lea	20(a3),a3		; [cyc] block
+	lea	82(a3),a3		; [cyc] fall-through
 	beq	.up
-	lea	28(a3),a3		; [cyc] block
+	lea	28(a3),a3		; [cyc] fall-through
 	cmpi.w	#6,d0
 	beq	.up
-	lea	28(a3),a3		; [cyc] block
+	lea	-34(a3),a3		; [cyc] fall-through
 	cmpi.w	#7,d0
 	bhi	.next
-	lea	28(a3),a3		; [cyc] block
+	lea	82(a3),a3		; [cyc] fall-through
 	bsr	anim_down	; 5, 7
-	lea	18(a3),a3		; [cyc] block
 	bra	.next
 .up:
-	lea	26(a3),a3		; [cyc] block
 	bsr	anim_up	; 4, 6
 .next:
-	lea	40(a3),a3		; [cyc] block
 	lea	OBJ_SIZE(a0),a0
 	cmpa.l	#HLEV+POOL+(NOBJ-1)*OBJ_SIZE,a0
 	bls	.loop
-	lea	42(a3),a3		; [cyc] block
+	lea	42(a3),a3		; [cyc] fall-through
 	clr.w	SYS+S_BUSY(a5)
 	rts
 
@@ -966,55 +996,50 @@ est_animate:
 ; animation helpers
 ; ---------------------------------------------------------------------------
 anim_down:
-	lea	30(a3),a3		; [cyc] block
-	move.w	O_ACNT(a0),d0
-	beq	.f
-	lea	42(a3),a3		; [cyc] block
-	subq.w	#1,O_ACNT(a0)
+	subq.w	#1,O_ACNT(a0)	; counter at 0: it wraps (carry), reload below
+	bcs	.cyc_stub141	; @unlikely
 	rts
+.cyc_stub141:
+	lea	234(a3),a3		; [cyc] unlikely edge
+	bra	.f
 .f:
-	lea	54(a3),a3		; [cyc] block
 	move.w	#3,O_ACNT(a0)
 	move.w	O_AFRAME(a0),d0
 	move.w	d0,d1
 	subq.w	#1,d1
 	bcc	.s
-	lea	14(a3),a3		; [cyc] block
+	lea	14(a3),a3		; [cyc] fall-through
 	moveq	#$f,d1
 .s:
-	lea	30(a3),a3		; [cyc] block
 	move.w	d1,O_AFRAME(a0)
 	bra	copy_anim_1800	; frame = old value (d0)
 
 anim_up:
-	lea	30(a3),a3		; [cyc] block
-	move.w	O_ACNT(a0),d0
-	beq	.f
-	lea	42(a3),a3		; [cyc] block
 	subq.w	#1,O_ACNT(a0)
+	bcs	.cyc_stub146	; @unlikely
 	rts
+.cyc_stub146:
+	lea	238(a3),a3		; [cyc] unlikely edge
+	bra	.f
 .f:
-	lea	58(a3),a3		; [cyc] block
 	move.w	#5,O_ACNT(a0)
 	move.w	O_AFRAME(a0),d0
 	moveq	#0,d1
 	cmpi.w	#3,d0
 	bcc	.s
-	lea	18(a3),a3		; [cyc] block
+	lea	18(a3),a3		; [cyc] fall-through
 	move.w	d0,d1
 	addq.w	#1,d1
 .s:
-	lea	30(a3),a3		; [cyc] block
 	move.w	d1,O_AFRAME(a0)
 	bra	copy_anim_1800
 
 ; dir_anim: if the type has directional sprites, ABASE = P1E + 4*(((ang+4)&$ff)>>3)
 ; in: d0.w = angle (0..255); clobbers d1
 dir_anim:
-	lea	30(a3),a3		; [cyc] block
 	tst.b	O_DIRANIM(a0)
 	beq	.x
-	lea	70(a3),a3		; [cyc] block
+	lea	70(a3),a3		; [cyc] fall-through
 	move.w	d0,d1
 	addq.w	#4,d1
 	andi.w	#$ff,d1
@@ -1024,12 +1049,10 @@ dir_anim:
 	add.w	O_P1E(a0),d1
 	move.w	d1,O_ABASE(a0)
 .x:
-	lea	24(a3),a3		; [cyc] block
 	rts
 
 ; rng: additive lagged Fibonacci (ARM $08010CD8) -> d0.l; clobbers d1, d2, a1
 rng:
-	lea	186(a3),a3		; [cyc] block
 	lea	RNG_S(a5),a1
 	move.l	RNG_J(a5),d1
 	move.l	RNG_K(a5),d2
@@ -1045,37 +1068,32 @@ rng:
 	subq.l	#1,d1	; j - 1
 	subq.l	#1,d2	; k - 1
 	bpl	.kok
-	lea	56(a3),a3		; [cyc] block
+	lea	10(a3),a3		; [cyc] fall-through
 	move.l	d1,RNG_J(a5)	; no wrap check on this path (firmware quirk)
 	moveq	#$36,d2
 	move.l	d2,RNG_K(a5)
 	bra	.x
 .kok:
-	lea	38(a3),a3		; [cyc] block
 	move.l	d2,RNG_K(a5)
 	tst.l	d1
 	bpl	.jok
-	lea	14(a3),a3		; [cyc] block
+	lea	14(a3),a3		; [cyc] fall-through
 	moveq	#$36,d1
 .jok:
-	lea	24(a3),a3		; [cyc] block
 	move.l	d1,RNG_J(a5)
 .x:
-	lea	40(a3),a3		; [cyc] block
 	andi.l	#$7fffffff,d0
 	rts
 
 ; aim: target angle towards player (d2 = 0: GLOB[0..1], else GLOB[2..3])
 ; from x d4, y d5 -> d0.w (0..255); clobbers d1, d2, a1
 aim:
-	lea	30(a3),a3		; [cyc] block
 	lea	GLOB(a5),a1
 	tst.w	d2
 	beq	.p
-	lea	18(a3),a3		; [cyc] block
+	lea	18(a3),a3		; [cyc] fall-through
 	addq.l	#4,a1
 .p:
-	lea	162(a3),a3		; [cyc] block
 	move.w	(a1)+,d0
 	sub.w	d4,d0
 	addi.w	#$200,d0
@@ -1091,13 +1109,12 @@ aim:
 	add.l	d1,d0	; index into the table at ARM $2C90
 	cmpi.l	#AIMTAB_SIZE,d0	; beyond the internal ROM: MAME reads 0
 	bcc	.zero
-	lea	60(a3),a3		; [cyc] block
+	lea	40(a3),a3		; [cyc] fall-through
 	lea	AIMTAB,a1
 	move.b	(a1,d0.l),d0
 	andi.w	#$ff,d0
 	rts
 .zero:
-	lea	28(a3),a3		; [cyc] block
 	moveq	#0,d0
 	rts
 
@@ -1105,53 +1122,56 @@ aim:
 ; state 2: scripted bullet
 ; ---------------------------------------------------------------------------
 st2:
-	lea	34(a3),a3		; [cyc] block
+	lea	526(a3),a3		; [cyc] block
 	move.w	O_AX(a0),d4
 	move.w	d4,d0
-	bpl	.p_1
-	lea	18(a3),a3		; [cyc] block
-	addi.w	#$ff,d4
-.p_1:
-	lea	98(a3),a3		; [cyc] block
-	asr.w	#8,d4
+	bpl	.p_9
+	lea	36(a3),a3		; [cyc] fall-through
+	addi.w	#$ff,d4	; v < 0: q = (v + 255) >> 8, r = v - (v + 255 & $ff00)
 	move.w	d4,d1
-	lsl.w	#8,d1
+	andi.w	#$ff00,d1
 	sub.w	d1,d0
+	bra	.s_9
+.p_9:
+	andi.w	#$ff,d0	; v >= 0: q = v >> 8, r = v & $ff
+.s_9:
 	move.w	d0,O_AX(a0)
+	asr.w	#8,d4
 	move.w	O_AY(a0),d5
 	move.w	d5,d0
-	bpl	.p_2
-	lea	18(a3),a3		; [cyc] block
-	addi.w	#$ff,d5
-.p_2:
-	lea	122(a3),a3		; [cyc] block
-	asr.w	#8,d5
+	bpl	.p_10
+	lea	36(a3),a3		; [cyc] fall-through
+	addi.w	#$ff,d5	; v < 0: q = (v + 255) >> 8, r = v - (v + 255 & $ff00)
 	move.w	d5,d1
-	lsl.w	#8,d1
+	andi.w	#$ff00,d1
 	sub.w	d1,d0
+	bra	.s_10
+.p_10:
+	andi.w	#$ff,d0	; v >= 0: q = v >> 8, r = v & $ff
+.s_10:
 	move.w	d0,O_AY(a0)
+	asr.w	#8,d5
 	add.w	O_X(a0),d4	; x
 	add.w	O_Y(a0),d5
 	add.w	d7,d5	; y
 	move.w	O_TIMER(a0),d0
-	beq	.script
-	lea	24(a3),a3		; [cyc] block
+	beq	.cyc_stub171	; @unlikely
 	subq.w	#1,d0
 	bra	st2_timer
+.cyc_stub171:
+	lea	66(a3),a3		; [cyc] unlikely edge
+	bra	.script
 .script:
-	lea	24(a3),a3		; [cyc] block
 	movea.l	O_SCRIPT(a0),a1
 st2_exec:
-	lea	38(a3),a3		; [cyc] block
 	move.w	2(a1),d0	; opcode
 	cmpi.w	#$13,d0
 	bhi	.bad
-	lea	42(a3),a3		; [cyc] block
+	lea	-292(a3),a3		; [cyc] fall-through
 	add.w	d0,d0
 	move.w	st2_ops(pc,d0.w),d0
 	jmp	st2_ops(pc,d0.w)
 .bad:
-	lea	26(a3),a3		; [cyc] block
 	move.w	#$ffff,d0
 	bra	st2_timer
 
@@ -1169,9 +1189,8 @@ op_kill:
 	clr.w	(a0)
 	rts
 op_vanish:
-	lea	26(a3),a3		; [cyc] block
+	lea	238(a3),a3		; [cyc] block
 	bsr	vanish_3a4
-	lea	18(a3),a3		; [cyc] block
 	bra	st3
 op_flag1:
 	lea	34(a3),a3		; [cyc] block
@@ -1182,26 +1201,24 @@ op_flag0:
 	clr.w	O_FLAG(a0)
 	bra	st2_after
 op_loop:
-	lea	30(a3),a3		; [cyc] block
+	lea	524(a3),a3		; [cyc] block
 	move.w	O_CNT(a0),d0
 	bne	.nz
-	lea	44(a3),a3		; [cyc] block
+	lea	-450(a3),a3		; [cyc] fall-through
 	moveq	#0,d1
 	move.b	(a1),d1	; ARM byte 1 of the instruction: repeat count
 	move.w	d1,O_CNT(a0)
 	beq	st2_after
-	lea	20(a3),a3		; [cyc] block
+	lea	488(a3),a3		; [cyc] fall-through
 	bra	.jump
 .nz:
-	lea	34(a3),a3		; [cyc] block
 	subq.w	#1,d0
 	move.w	d0,O_CNT(a0)
 	bne	.jump
-	lea	36(a3),a3		; [cyc] block
+	lea	-36(a3),a3		; [cyc] fall-through
 	clr.w	O_WAIT(a0)
 	bra	st2_advance
 .jump:
-	lea	112(a3),a3		; [cyc] block
 	moveq	#0,d1
 	move.w	4(a1),d1
 	lsl.l	#3,d1
@@ -1213,7 +1230,7 @@ op_loop:
 	move.w	d0,O_WAIT(a0)
 	bra	st2_exec
 op_type:
-	lea	140(a3),a3		; [cyc] block
+	lea	206(a3),a3		; [cyc] block
 	moveq	#0,d1
 	move.w	4(a1),d1
 	lsl.l	#3,d1
@@ -1224,7 +1241,7 @@ op_type:
 	move.w	O_P1E(a0),d1
 	tst.b	O_DIRANIM(a0)
 	beq	.nd
-	lea	62(a3),a3		; [cyc] block
+	lea	62(a3),a3		; [cyc] fall-through
 	moveq	#0,d0
 	move.b	O_ANG(a0),d0
 	addq.w	#4,d0
@@ -1234,7 +1251,6 @@ op_type:
 	add.w	d0,d0
 	add.w	d0,d1
 .nd:
-	lea	74(a3),a3		; [cyc] block
 	move.w	d1,O_ABASE(a0)
 	moveq	#0,d1
 	move.b	O_NFRAMES(a0),d1
@@ -1242,62 +1258,56 @@ op_type:
 	clr.w	O_ACNT(a0)
 	bra	st2_after
 op_spdadd:
-	lea	42(a3),a3		; [cyc] block
+	lea	472(a3),a3		; [cyc] block
 	move.w	4(a1),d1
 	add.w	O_SPEED(a0),d1
 	bra	op_spd
 op_spdsub:
-	lea	42(a3),a3		; [cyc] block
+	lea	472(a3),a3		; [cyc] block
 	move.w	O_SPEED(a0),d1
 	sub.w	4(a1),d1
 	bra	op_spd
 op_spdset:
-	lea	20(a3),a3		; [cyc] block
+	lea	450(a3),a3		; [cyc] block
 	move.w	4(a1),d1
 op_spd:
-	lea	66(a3),a3		; [cyc] block
 	move.w	d1,O_SPEED(a0)
 	moveq	#0,d0
 	move.b	O_ANG(a0),d0
 	move.l	a1,-(sp)
 	bsr	set_vel
-	lea	30(a3),a3		; [cyc] block
 	movea.l	(sp)+,a1
 	bra	st2_after
 op_angadd:
-	lea	46(a3),a3		; [cyc] block
+	lea	552(a3),a3		; [cyc] block
 	moveq	#0,d0
 	move.b	O_ANG(a0),d0
 	add.w	4(a1),d0
 	bra	op_ang
 op_angsub:
-	lea	46(a3),a3		; [cyc] block
+	lea	552(a3),a3		; [cyc] block
 	moveq	#0,d0
 	move.b	O_ANG(a0),d0
 	sub.w	4(a1),d0
 	bra	op_ang
 op_angset:
-	lea	20(a3),a3		; [cyc] block
+	lea	526(a3),a3		; [cyc] block
 	move.w	4(a1),d0
 op_ang:
-	lea	78(a3),a3		; [cyc] block
 	andi.w	#$ff,d0
 	move.b	d0,O_ANG(a0)
 	move.w	O_SPEED(a0),d1
 	move.l	a1,-(sp)
 	move.w	d0,-(sp)
 	bsr	set_vel
-	lea	34(a3),a3		; [cyc] block
 	move.w	(sp)+,d0
 	bsr	dir_anim
-	lea	30(a3),a3		; [cyc] block
 	movea.l	(sp)+,a1
 	bra	st2_after
 op_angrnd:
-	lea	38(a3),a3		; [cyc] block
+	lea	842(a3),a3		; [cyc] block
 	move.l	a1,-(sp)
 	bsr	rng
-	lea	62(a3),a3		; [cyc] block
 	movea.l	(sp),a1
 	move.w	6(a1),d1
 	subq.w	#1,d1
@@ -1305,13 +1315,12 @@ op_angrnd:
 	add.w	4(a1),d0
 	bra	op_ang_saved
 op_angspread:
-	lea	74(a3),a3		; [cyc] block
+	lea	876(a3),a3		; [cyc] block
 	move.w	6(a1),d1
 	lsr.w	#1,d1
 	sub.b	d1,O_ANG(a0)
 	move.l	a1,-(sp)
 	bsr	rng
-	lea	60(a3),a3		; [cyc] block
 	movea.l	(sp),a1
 	move.w	6(a1),d1
 	subq.w	#1,d1
@@ -1320,59 +1329,52 @@ op_angspread:
 	move.b	O_ANG(a0),d1
 	add.w	d1,d0
 op_ang_saved:
-	lea	66(a3),a3		; [cyc] block
 	andi.w	#$ff,d0
 	move.b	d0,O_ANG(a0)
 	move.w	O_SPEED(a0),d1
 	move.w	d0,-(sp)
 	bsr	set_vel
-	lea	34(a3),a3		; [cyc] block
 	move.w	(sp)+,d0
 	bsr	dir_anim
-	lea	30(a3),a3		; [cyc] block
 	movea.l	(sp)+,a1
 	bra	st2_after
 op_angspd:
-	lea	74(a3),a3		; [cyc] block
+	lea	580(a3),a3		; [cyc] block
 	move.b	7(a1),O_ANG(a0)	; low byte of a2
 	move.w	4(a1),O_SPEED(a0)
 	moveq	#0,d0
 	move.b	O_ANG(a0),d0
 	bra	op_ang
 op_aimturn:
-	lea	50(a3),a3		; [cyc] block
+	lea	306(a3),a3		; [cyc] block
 	move.l	a1,-(sp)
 	move.w	4(a1),d2
 	bsr	aim	; d0 = target
-	lea	50(a3),a3		; [cyc] block
 	movea.l	(sp),a1
 	moveq	#0,d1
 	move.b	O_ANG(a0),d1	; current
 	cmp.w	d1,d0
 	beq	.same
-	lea	52(a3),a3		; [cyc] block
+	lea	542(a3),a3		; [cyc] fall-through
 	move.w	d0,d2
 	sub.w	d1,d2	; target - current
 	moveq	#0,d0
 	move.b	7(a1),d0	; step = a2 & $ff
 	cmpi.w	#$7f,d2
 	ble	.pos
-	lea	14(a3),a3		; [cyc] block
+	lea	14(a3),a3		; [cyc] fall-through
 	neg.w	d0
 .pos:
-	lea	22(a3),a3		; [cyc] block
 	add.w	d1,d0
 	bra	op_ang_saved
 .same:
-	lea	26(a3),a3		; [cyc] block
 	addq.l	#4,sp
 	bra	st2_after
 op_aim:
-	lea	50(a3),a3		; [cyc] block
+	lea	750(a3),a3		; [cyc] block
 	move.l	a1,-(sp)
 	move.w	4(a1),d2
 	bsr	aim
-	lea	18(a3),a3		; [cyc] block
 	bra	op_ang_saved
 op_accadd:
 	lea	64(a3),a3		; [cyc] block
@@ -1384,17 +1386,16 @@ op_accadd:
 
 ; instruction finished: repeat it (wait count) or step to the next one
 st2_after:
-	lea	30(a3),a3		; [cyc] block
+	lea	426(a3),a3		; [cyc] block
 	tst.w	O_WAIT(a0)
 	beq	st2_advance
-	lea	68(a3),a3		; [cyc] block
+	lea	-12(a3),a3		; [cyc] fall-through
 	subq.w	#1,O_WAIT(a0)
 	movea.l	O_SCRIPT(a0),a1
 	moveq	#0,d0
 	move.b	1(a1),d0	; ARM byte 0: duration
 	bra	st2_timer
 st2_advance:
-	lea	88(a3),a3		; [cyc] block
 	movea.l	O_SCRIPT(a0),a1
 	moveq	#0,d0
 	move.b	8(a1),d0	; next instruction's repeat count (ARM byte 9)
@@ -1403,22 +1404,16 @@ st2_advance:
 	move.l	a1,O_SCRIPT(a0)
 	move.b	1(a1),d0	; its duration
 st2_timer:
-	lea	38(a3),a3		; [cyc] block
 	move.w	d0,O_TIMER(a0)
 	cmpi.w	#-9,d5
-	ble	.off
-	lea	28(a3),a3		; [cyc] block
+	ble	.cyc_stub212	; @unlikely
 	cmpi.w	#$e8,d5
-	bge	.off
-	lea	28(a3),a3		; [cyc] block
+	bge	.cyc_stub213	; @unlikely
 	cmpi.w	#-9,d4
-	ble	.off
-	lea	28(a3),a3		; [cyc] block
+	ble	.off	; @unlikely
 	cmpi.w	#$1c7,d4
-	bgt	.off
-	lea	10(a3),a3		; [cyc] fall-through
+	bgt	.cyc_stub215	; @unlikely
 .on:
-	lea	198(a3),a3		; [cyc] block
 	move.w	d4,d0
 	sub.w	O_OX(a0),d0
 	andi.w	#$7ff,d0
@@ -1436,85 +1431,96 @@ st2_timer:
 	move.w	O_VY(a0),d0
 	add.w	d0,O_AY(a0)
 	move.w	O_ACNT(a0),d0
-	beq	.frame
-	lea	42(a3),a3		; [cyc] block
+	beq	.cyc_stub216	; @unlikely
 	subq.w	#1,O_ACNT(a0)
 	rts
+.cyc_stub212:
+	lea	-22(a3),a3		; [cyc] unlikely edge
+	bra	.off
+.cyc_stub213:
+	lea	-2(a3),a3		; [cyc] unlikely edge
+	bra	.off
+.cyc_stub215:
+	lea	38(a3),a3		; [cyc] unlikely edge
+	bra	.off
+.cyc_stub216:
+	lea	212(a3),a3		; [cyc] unlikely edge
+	bra	.frame
 .off:
-	lea	30(a3),a3		; [cyc] block
 	tst.w	O_FLAG(a0)
 	bne	.on
-	lea	20(a3),a3		; [cyc] block
+	lea	-204(a3),a3		; [cyc] fall-through
 	bra	op_kill
 .frame:
-	lea	58(a3),a3		; [cyc] block
 	move.w	O_APER(a0),O_ACNT(a0)
 	move.w	O_AFRAME(a0),d0
 	move.w	d0,d1
 	subq.w	#1,d1
 	bcc	.fs
-	lea	26(a3),a3		; [cyc] block
+	lea	26(a3),a3		; [cyc] fall-through
 	moveq	#0,d1
 	move.b	O_NFRAMES(a0),d1
 .fs:
-	lea	204(a3),a3		; [cyc] block
 	move.w	d1,O_AFRAME(a0)
 	; entry = T_1714 + 8*ABASE - 8*frame (32-bit)
 	moveq	#0,d1
 	move.w	O_ABASE(a0),d1
+	andi.l	#$ffff,d0
+	sub.l	d0,d1
 	lsl.l	#3,d1
 	lea	T_1714,a1
 	adda.l	d1,a1
-	moveq	#0,d1
-	move.w	d0,d1
-	lsl.l	#3,d1
-	suba.l	d1,a1
-	move.l	(a1)+,O_SPR(a0)
+	move.w	(a1)+,d0
+	andi.w	#$e0ff,d0
+	ori.w	#$1700,d0
+	move.w	d0,O_SPR(a0)
+	move.w	(a1)+,O_SPR+2(a0)
 	move.l	(a1),O_SPR+4(a0)
-	andi.w	#$e0ff,O_SPR(a0)
-	ori.w	#$1700,O_SPR(a0)
 	rts
 
 ; ---------------------------------------------------------------------------
 ; state 3: vanish
 ; ---------------------------------------------------------------------------
 st3:
-	lea	30(a3),a3		; [cyc] block
+	lea	500(a3),a3		; [cyc] block
 	move.w	O_WAIT(a0),d3
 	bne	.w
-	lea	70(a3),a3		; [cyc] block
+	lea	-400(a3),a3		; [cyc] fall-through
 	subq.w	#1,SYS+$02(a5)	; $37C
 	subq.w	#1,SYS+$08(a5)
 	clr.w	(a0)
 	rts
 .w:
-	lea	50(a3),a3		; [cyc] block
 	subq.w	#1,d3
 	move.w	d3,O_WAIT(a0)
 	move.w	O_AX(a0),d4
 	move.w	d4,d0
-	bpl	.p_4
-	lea	18(a3),a3		; [cyc] block
-	addi.w	#$ff,d4
-.p_4:
-	lea	98(a3),a3		; [cyc] block
-	asr.w	#8,d4
+	bpl	.p_12
+	lea	36(a3),a3		; [cyc] fall-through
+	addi.w	#$ff,d4	; v < 0: q = (v + 255) >> 8, r = v - (v + 255 & $ff00)
 	move.w	d4,d1
-	lsl.w	#8,d1
+	andi.w	#$ff00,d1
 	sub.w	d1,d0
+	bra	.s_12
+.p_12:
+	andi.w	#$ff,d0	; v >= 0: q = v >> 8, r = v & $ff
+.s_12:
 	move.w	d0,O_AX(a0)
+	asr.w	#8,d4
 	move.w	O_AY(a0),d5
 	move.w	d5,d0
-	bpl	.p_5
-	lea	18(a3),a3		; [cyc] block
-	addi.w	#$ff,d5
-.p_5:
-	lea	390(a3),a3		; [cyc] block
-	asr.w	#8,d5
+	bpl	.p_13
+	lea	36(a3),a3		; [cyc] fall-through
+	addi.w	#$ff,d5	; v < 0: q = (v + 255) >> 8, r = v - (v + 255 & $ff00)
 	move.w	d5,d1
-	lsl.w	#8,d1
+	andi.w	#$ff00,d1
 	sub.w	d1,d0
+	bra	.s_13
+.p_13:
+	andi.w	#$ff,d0	; v >= 0: q = v >> 8, r = v & $ff
+.s_13:
 	move.w	d0,O_AY(a0)
+	asr.w	#8,d5
 	add.w	O_X(a0),d4
 	add.w	O_Y(a0),d5
 	add.w	d7,d5
@@ -1547,41 +1553,37 @@ st3:
 ; state 1: appear
 ; ---------------------------------------------------------------------------
 st1:
-	lea	30(a3),a3		; [cyc] block
+	lea	238(a3),a3		; [cyc] block
 	move.w	O_TIMER(a0),d0
 	beq	.go
-	lea	48(a3),a3		; [cyc] block
+	lea	328(a3),a3		; [cyc] fall-through
 	subq.w	#1,d0
 	move.w	d0,O_TIMER(a0)
 	tst.w	O_WAIT(a0)
 	bne	.w1
-	lea	36(a3),a3		; [cyc] block
+	lea	20(a3),a3		; [cyc] fall-through
 	move.w	#1,O_WAIT(a0)
 	bra	.w2
 .w1:
-	lea	24(a3),a3		; [cyc] block
 	add.w	d7,O_Y(a0)
 .w2:
-	lea	30(a3),a3		; [cyc] block
 	move.w	O_SUB(a0),d0
 	bne	.sub
-	lea	110(a3),a3		; [cyc] block
+	lea	-340(a3),a3		; [cyc] fall-through
 	lea	T_1718,a1
 	move.l	(a1)+,O_SPRX(a0)
 	move.l	(a1)+,O_SPRX+4(a0)
 	move.l	(a1),O_SPRX+8(a0)
 	rts
 .sub:
-	lea	42(a3),a3		; [cyc] block
 	moveq	#0,d1
 	move.w	O_CNT(a0),d1
 	cmpi.w	#2,d0
 	bne	.dir
-	lea	36(a3),a3		; [cyc] block
+	lea	-110(a3),a3		; [cyc] fall-through
 	addq.w	#1,O_CNT(a0)
 	bra	.idx
 .dir:
-	lea	154(a3),a3		; [cyc] block
 	move.w	SYS+$16(a5),d2
 	addq.w	#1,d2
 	move.w	d2,SYS+$16(a5)
@@ -1598,7 +1600,6 @@ st1:
 	add.l	d2,d1
 	andi.l	#$ffff,d1
 .idx:
-	lea	278(a3),a3		; [cyc] block
 	move.l	d1,d0
 	lsl.l	#3,d0
 	lea	T_1720,a1
@@ -1622,28 +1623,23 @@ st1:
 	move.w	d0,O_SPRY(a0)
 	rts
 .go:
-	lea	30(a3),a3		; [cyc] block
 	tst.w	O_WAIT(a0)
 	bne	.g1
-	lea	26(a3),a3		; [cyc] block
+	lea	26(a3),a3		; [cyc] fall-through
 	sub.w	d7,O_Y(a0)
 .g1:
-	lea	30(a3),a3		; [cyc] block
 	tst.w	SYS+$14(a5)
 	beq	.g2
-	lea	28(a3),a3		; [cyc] block
+	lea	76(a3),a3		; [cyc] fall-through
 	bsr	vanish_40c
-	lea	18(a3),a3		; [cyc] block
 	bra	st3
 .g2:
-	lea	34(a3),a3		; [cyc] block
 	move.l	O_SCRIPT(a0),d0
 	bne	.g3
-	lea	36(a3),a3		; [cyc] block
+	lea	-32(a3),a3		; [cyc] fall-through
 	move.w	#$ffff,O_TIMER(a0)
 	bra	.g4
 .g3:
-	lea	76(a3),a3		; [cyc] block
 	movea.l	d0,a1
 	moveq	#0,d0
 	move.b	(a1),d0	; ARM byte 1: repeat
@@ -1652,7 +1648,6 @@ st1:
 	move.w	d0,O_TIMER(a0)
 	clr.w	O_CNT(a0)
 .g4:
-	lea	78(a3),a3		; [cyc] block
 	clr.w	O_SUB(a0)
 	move.w	#2,(a0)
 	addq.w	#1,SYS+$06(a5)
@@ -1663,7 +1658,6 @@ st1:
 ; state 4: bouncing debris
 ; ---------------------------------------------------------------------------
 st4_vel:
-	lea	104(a3),a3		; [cyc] block
 	subq.w	#1,O_TIMER(a0)
 	move.w	SYS+S_CNT86(a5),d0
 	addq.w	#1,d0
@@ -1676,35 +1670,39 @@ st4_vel:
 	rts
 
 st4:
-	lea	62(a3),a3		; [cyc] block
+	lea	358(a3),a3		; [cyc] block
 	move.w	O_VX(a0),d2	; vx
 	move.w	O_VY(a0),d3	; vy
 	move.w	O_AX(a0),d4
 	add.w	d2,d4
 	move.w	d4,d0
-	bpl	.p_6
-	lea	18(a3),a3		; [cyc] block
-	addi.w	#$ff,d4
-.p_6:
-	lea	102(a3),a3		; [cyc] block
-	asr.w	#8,d4
+	bpl	.p_14
+	lea	36(a3),a3		; [cyc] fall-through
+	addi.w	#$ff,d4	; v < 0: q = (v + 255) >> 8, r = v - (v + 255 & $ff00)
 	move.w	d4,d1
-	lsl.w	#8,d1
+	andi.w	#$ff00,d1
 	sub.w	d1,d0
+	bra	.s_14
+.p_14:
+	andi.w	#$ff,d0	; v >= 0: q = v >> 8, r = v & $ff
+.s_14:
 	move.w	d0,O_AX(a0)
+	asr.w	#8,d4
 	move.w	O_AY(a0),d5
 	add.w	d3,d5
 	move.w	d5,d0
-	bpl	.p_7
-	lea	18(a3),a3		; [cyc] block
-	addi.w	#$ff,d5
-.p_7:
-	lea	146(a3),a3		; [cyc] block
-	asr.w	#8,d5
+	bpl	.p_15
+	lea	36(a3),a3		; [cyc] fall-through
+	addi.w	#$ff,d5	; v < 0: q = (v + 255) >> 8, r = v - (v + 255 & $ff00)
 	move.w	d5,d1
-	lsl.w	#8,d1
+	andi.w	#$ff00,d1
 	sub.w	d1,d0
+	bra	.s_15
+.p_15:
+	andi.w	#$ff,d0	; v >= 0: q = v >> 8, r = v & $ff
+.s_15:
 	move.w	d0,O_AY(a0)
+	asr.w	#8,d5
 	add.w	O_X(a0),d4
 	move.w	d4,O_X(a0)	; x
 	add.w	O_Y(a0),d5
@@ -1712,51 +1710,44 @@ st4:
 	move.w	d5,O_Y(a0)	; y
 	tst.w	O_TIMER(a0)
 	beq	.nob
-	lea	24(a3),a3		; [cyc] block
+	lea	100(a3),a3		; [cyc] fall-through
 	tst.w	d2
 	bgt	.right
-	lea	28(a3),a3		; [cyc] block
+	lea	10(a3),a3		; [cyc] fall-through
 	cmpi.w	#$e,d4
 	bgt	.vert
-	lea	28(a3),a3		; [cyc] block
+	lea	142(a3),a3		; [cyc] fall-through
 	bsr	st4_vel	; left edge
-	lea	58(a3),a3		; [cyc] block
 	move.w	(a1)+,O_VX(a0)
 	move.w	(a1),d0
 	neg.w	d0
 	move.w	d0,O_VY(a0)
 	bra	.draw
 .right:
-	lea	26(a3),a3		; [cyc] block
 	cmpi.w	#$1b2,d4
 	blt	.vert
-	lea	28(a3),a3		; [cyc] block
+	lea	142(a3),a3		; [cyc] fall-through
 	bsr	st4_vel	; right edge
-	lea	58(a3),a3		; [cyc] block
 	move.w	(a1)+,d0
 	neg.w	d0
 	move.w	d0,O_VX(a0)
 	move.w	(a1),O_VY(a0)
 	bra	.draw
 .vert:
-	lea	22(a3),a3		; [cyc] block
 	tst.w	d3
 	bgt	.down
-	lea	28(a3),a3		; [cyc] block
+	lea	10(a3),a3		; [cyc] fall-through
 	cmpi.w	#$d,d5
 	bge	.draw
-	lea	28(a3),a3		; [cyc] block
+	lea	158(a3),a3		; [cyc] fall-through
 	bsr	st4_vel	; top edge
-	lea	42(a3),a3		; [cyc] block
 	move.l	(a1),O_VX(a0)
 	bra	.draw
 .down:
-	lea	26(a3),a3		; [cyc] block
 	cmpi.w	#$d3,d5
 	ble	.draw
-	lea	28(a3),a3		; [cyc] block
+	lea	182(a3),a3		; [cyc] fall-through
 	bsr	st4_vel	; bottom edge
-	lea	66(a3),a3		; [cyc] block
 	move.w	(a1)+,d0
 	neg.w	d0
 	move.w	d0,O_VX(a0)
@@ -1765,42 +1756,36 @@ st4:
 	move.w	d0,O_VY(a0)
 	bra	.draw
 .nob:
-	lea	22(a3),a3		; [cyc] block
 	tst.w	d2	; no bounces left: die once off screen
 	bgt	.nr
-	lea	28(a3),a3		; [cyc] block
+	lea	10(a3),a3		; [cyc] fall-through
 	cmpi.w	#-$e,d4
 	ble	.die
-	lea	20(a3),a3		; [cyc] block
+	lea	110(a3),a3		; [cyc] fall-through
 	bra	.ny
 .nr:
-	lea	26(a3),a3		; [cyc] block
 	cmpi.w	#$1ce,d4
 	bge	.die
-	lea	10(a3),a3		; [cyc] fall-through
+	lea	100(a3),a3		; [cyc] fall-through
 .ny:
-	lea	22(a3),a3		; [cyc] block
 	tst.w	d3
 	bgt	.nd
-	lea	28(a3),a3		; [cyc] block
+	lea	10(a3),a3		; [cyc] fall-through
 	cmpi.w	#-$c,d5
 	bgt	.draw
-	lea	20(a3),a3		; [cyc] block
+	lea	-38(a3),a3		; [cyc] fall-through
 	bra	.die
 .nd:
-	lea	26(a3),a3		; [cyc] block
 	cmpi.w	#$ec,d5
 	blt	.draw
-	lea	10(a3),a3		; [cyc] fall-through
+	lea	-48(a3),a3		; [cyc] fall-through
 .die:
-	lea	84(a3),a3		; [cyc] block
 	subq.w	#1,SYS+$02(a5)	; $528
 	subq.w	#1,SYS+$0a(a5)
 	subq.w	#1,SYS+$0e(a5)
 	clr.w	(a0)
 	rts
 .draw:
-	lea	98(a3),a3		; [cyc] block
 	move.w	d4,d0
 	subi.w	#$e,d0
 	andi.w	#$7ff,d0
@@ -1817,44 +1802,47 @@ st4:
 ; state 5: falling debris
 ; ---------------------------------------------------------------------------
 st5:
-	lea	46(a3),a3		; [cyc] block
+	lea	404(a3),a3		; [cyc] block
 	move.w	O_AX(a0),d4
 	add.w	O_VX(a0),d4
 	move.w	d4,d0
-	bpl	.p_8
-	lea	18(a3),a3		; [cyc] block
-	addi.w	#$ff,d4
-.p_8:
-	lea	110(a3),a3		; [cyc] block
-	asr.w	#8,d4
+	bpl	.p_16
+	lea	36(a3),a3		; [cyc] fall-through
+	addi.w	#$ff,d4	; v < 0: q = (v + 255) >> 8, r = v - (v + 255 & $ff00)
 	move.w	d4,d1
-	lsl.w	#8,d1
+	andi.w	#$ff00,d1
 	sub.w	d1,d0
+	bra	.s_16
+.p_16:
+	andi.w	#$ff,d0	; v >= 0: q = v >> 8, r = v & $ff
+.s_16:
 	move.w	d0,O_AX(a0)
+	asr.w	#8,d4
 	move.w	O_AY(a0),d5
 	add.w	O_VY(a0),d5
 	move.w	d5,d0
-	bpl	.p_9
-	lea	18(a3),a3		; [cyc] block
-	addi.w	#$ff,d5
-.p_9:
-	lea	118(a3),a3		; [cyc] block
-	asr.w	#8,d5
+	bpl	.p_17
+	lea	36(a3),a3		; [cyc] fall-through
+	addi.w	#$ff,d5	; v < 0: q = (v + 255) >> 8, r = v - (v + 255 & $ff00)
 	move.w	d5,d1
-	lsl.w	#8,d1
+	andi.w	#$ff00,d1
 	sub.w	d1,d0
+	bra	.s_17
+.p_17:
+	andi.w	#$ff,d0	; v >= 0: q = v >> 8, r = v & $ff
+.s_17:
 	move.w	d0,O_AY(a0)
+	asr.w	#8,d5
 	add.w	O_X(a0),d4
 	move.w	d4,O_X(a0)
 	cmp.w	O_FLAG(a0),d4
 	bgt	.alive
-	lea	70(a3),a3		; [cyc] block
+	lea	-120(a3),a3		; [cyc] fall-through
 	subq.w	#1,SYS+$02(a5)	; $500
 	subq.w	#1,SYS+$10(a5)
 	clr.w	(a0)
 	rts
 .alive:
-	lea	154(a3),a3		; [cyc] block
 	subi.w	#$10,O_VX(a0)
 	add.w	O_Y(a0),d5
 	add.w	d7,d5
@@ -1875,33 +1863,29 @@ st5:
 ; states 6 / 7: items moving with the background
 ; ---------------------------------------------------------------------------
 item_move:
-	lea	30(a3),a3		; [cyc] block
 	tst.w	O_TIMER(a0)
 	beq	.m
-	lea	42(a3),a3		; [cyc] block
+	lea	-44(a3),a3		; [cyc] fall-through
 	clr.w	O_TIMER(a0)
 	rts
 .m:
-	lea	46(a3),a3		; [cyc] block
 	move.w	GLOB+8(a5),d0
 	cmpi.w	#2,O_P1E(a0)
 	bne	.s
-	lea	22(a3),a3		; [cyc] block
+	lea	22(a3),a3		; [cyc] fall-through
 	move.w	GLOB+10(a5),d0
 .s:
-	lea	56(a3),a3		; [cyc] block
 	add.w	d0,O_X(a0)
 	add.w	d7,O_Y(a0)
 	rts
 
 st6:
-	lea	26(a3),a3		; [cyc] block
+	lea	336(a3),a3		; [cyc] block
 	bsr	item_move
-	lea	38(a3),a3		; [cyc] block
 	move.w	O_X(a0),d4
 	cmpi.w	#-$e,d4
 	ble	.die
-	lea	112(a3),a3		; [cyc] block
+	lea	-16(a3),a3		; [cyc] fall-through
 	move.w	O_Y(a0),d5
 	move.w	d4,d0
 	subi.w	#$e,d0
@@ -1915,31 +1899,26 @@ st6:
 	move.w	d0,O_SPRY(a0)
 	bra	anim_up
 .die:
-	lea	74(a3),a3		; [cyc] block
 	subq.w	#1,SYS+$02(a5)	; $4B4
 	subq.w	#1,SYS+$0c(a5)
 	subq.w	#1,SYS+$0a(a5)
 	bsr	push_removed
-	lea	36(a3),a3		; [cyc] block
 	clr.w	(a0)
 	rts
 
 st7:
-	lea	26(a3),a3		; [cyc] block
+	lea	322(a3),a3		; [cyc] block
 	bsr	item_move
-	lea	42(a3),a3		; [cyc] block
 	move.w	O_X(a0),d4
 	cmp.w	O_FLAG(a0),d4
 	bgt	.alive
-	lea	60(a3),a3		; [cyc] block
+	lea	12(a3),a3		; [cyc] fall-through
 	subq.w	#1,SYS+$02(a5)	; $474
 	subq.w	#1,SYS+$0c(a5)
 	bsr	push_removed
-	lea	36(a3),a3		; [cyc] block
 	clr.w	(a0)
 	rts
 .alive:
-	lea	118(a3),a3		; [cyc] block
 	move.w	O_Y(a0),d5
 	move.w	d4,d0
 	sub.w	O_OX(a0),d0

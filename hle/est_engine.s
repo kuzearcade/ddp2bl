@@ -10,12 +10,14 @@
 SPLIT		macro
 		move.w	\1,\3
 		bpl.s	.p\@
-		addi.w	#$ff,\1
-.p\@:		asr.w	#8,\1
+		addi.w	#$ff,\1		; v < 0: q = (v + 255) >> 8, r = v - (v + 255 & $ff00)
 		move.w	\1,\4
-		lsl.w	#8,\4
+		andi.w	#$ff00,\4
 		sub.w	\4,\3
-		move.w	\3,\2(a0)
+		bra.s	.s\@
+.p\@:		andi.w	#$ff,\3		; v >= 0: q = v >> 8, r = v & $ff
+.s\@:		move.w	\3,\2(a0)
+		asr.w	#8,\1
 		endm
 
 ; SPRXY x, y, ox, oy, t : sprite position words
@@ -32,19 +34,37 @@ SPRXY		macro
 		move.w	\5,O_SPRY(a0)
 		endm
 
+; The object loop accounts for itself: every slot is charged UPD_DEAD up front, a live
+; slot adds UPD_LIVE-UPD_DEAD (its state routine accounts for itself, rts included), a
+; slot above state 7 (skipped, as by the firmware) adds UPD_HIGH-UPD_DEAD.
+;   dead   8 + 10 + 8 + 14 + 10                               = 50
+;   live   8 + 8 + 8 + 8 + 8 + 4 + 14 + 22 + 8 + 14 + 10        = 112
+;   high   8 + 8 + 8 + 10 + 8 + 10 + 8 + 14 + 10               = 84
+; plus the entry bra.s (10), minus 2 for the last bls.s (not taken: 8).
+UPD_DEAD	equ	50
+UPD_LIVE	equ	112
+UPD_HIGH	equ	84
+
 est_update:
 	move.w	GLOB+14(a5),d7
 	lea	POOL(a5),a0
-.loop:	move.w	(a0),d0
-	beq.s	.next
-	cmpi.w	#7,d0
-	bhi.s	.next
-	add.w	d0,d0
-	move.w	.tab-2(pc,d0.w),d0
-	jsr	.tab(pc,d0.w)
-.next:	lea	OBJ_SIZE(a0),a0
-	cmpa.l	#HLEV+POOL+(NOBJ-1)*OBJ_SIZE,a0
-	bls.s	.loop
+	lea	NOBJ*UPD_DEAD+10-2(a3),a3	; @cyc-adjust
+	; @cyc-off
+	bra.s	.loop			; 10
+.high:	lea	UPD_HIGH-UPD_DEAD(a3),a3	;  8  @cyc-adjust
+	bra.s	.next			; 10
+.loop:	move.w	(a0),d0			;  8
+	beq.s	.next			; 10 / 8
+	cmpi.w	#7,d0			;  8
+	bhi.s	.high			; 10 / 8
+	lea	UPD_LIVE-UPD_DEAD(a3),a3	;  8  @cyc-adjust
+	add.w	d0,d0			;  4
+	move.w	.tab-2(pc,d0.w),d0	; 14
+	jsr	.tab(pc,d0.w)		; 22
+.next:	lea	OBJ_SIZE(a0),a0		;  8
+	cmpa.l	#HLEV+POOL+(NOBJ-1)*OBJ_SIZE,a0	; 14
+	bls.s	.loop			; 10 / 8
+	; @cyc-on
 	tst.w	SYS+$12(a5)
 	beq.s	.t1
 	subq.w	#1,SYS+$12(a5)
@@ -78,9 +98,8 @@ est_animate:
 ; animation helpers
 ; ---------------------------------------------------------------------------
 anim_down:				; period 3, frames 15..0 (states 5, 7)
-	move.w	O_ACNT(a0),d0
-	beq.s	.f
-	subq.w	#1,O_ACNT(a0)
+	subq.w	#1,O_ACNT(a0)		; counter at 0: it wraps (carry), reload below
+	bcs.s	.f			; @unlikely
 	rts
 .f:	move.w	#3,O_ACNT(a0)
 	move.w	O_AFRAME(a0),d0
@@ -92,9 +111,8 @@ anim_down:				; period 3, frames 15..0 (states 5, 7)
 	bra	copy_anim_1800		; frame = old value (d0)
 
 anim_up:				; period 5, frames 0..3 (states 4, 6)
-	move.w	O_ACNT(a0),d0
-	beq.s	.f
 	subq.w	#1,O_ACNT(a0)
+	bcs.s	.f			; @unlikely
 	rts
 .f:	move.w	#5,O_ACNT(a0)
 	move.w	O_AFRAME(a0),d0
@@ -191,7 +209,7 @@ st2:
 	add.w	O_Y(a0),d5
 	add.w	d7,d5			; y
 	move.w	O_TIMER(a0),d0
-	beq.s	.script
+	beq.s	.script			; @unlikely
 	subq.w	#1,d0
 	bra	st2_timer
 .script:
@@ -404,13 +422,13 @@ st2_advance:
 st2_timer:
 	move.w	d0,O_TIMER(a0)
 	cmpi.w	#-9,d5
-	ble.s	.off
+	ble.s	.off			; @unlikely
 	cmpi.w	#$e8,d5
-	bge.s	.off
+	bge.s	.off			; @unlikely
 	cmpi.w	#-9,d4
-	ble.s	.off
+	ble.s	.off			; @unlikely
 	cmpi.w	#$1c7,d4
-	bgt.s	.off
+	bgt.s	.off			; @unlikely
 .on:	SPRXY	d4,d5,O_OX(a0),O_OY(a0),d0
 	move.w	d4,O_X(a0)
 	move.w	d5,O_Y(a0)
@@ -419,7 +437,7 @@ st2_timer:
 	move.w	O_VY(a0),d0
 	add.w	d0,O_AY(a0)
 	move.w	O_ACNT(a0),d0
-	beq.s	.frame
+	beq.s	.frame			; @unlikely
 	subq.w	#1,O_ACNT(a0)
 	rts
 .off:	tst.w	O_FLAG(a0)
@@ -436,17 +454,17 @@ st2_timer:
 	; entry = T_1714 + 8*ABASE - 8*frame (32-bit)
 	moveq	#0,d1
 	move.w	O_ABASE(a0),d1
+	andi.l	#$ffff,d0
+	sub.l	d0,d1
 	lsl.l	#3,d1
 	lea	T_1714,a1
 	adda.l	d1,a1
-	moveq	#0,d1
-	move.w	d0,d1
-	lsl.l	#3,d1
-	suba.l	d1,a1
-	move.l	(a1)+,O_SPR(a0)
+	move.w	(a1)+,d0
+	andi.w	#$e0ff,d0
+	ori.w	#$1700,d0
+	move.w	d0,O_SPR(a0)
+	move.w	(a1)+,O_SPR+2(a0)
 	move.l	(a1),O_SPR+4(a0)
-	andi.w	#$e0ff,O_SPR(a0)
-	ori.w	#$1700,O_SPR(a0)
 	rts
 
 ; ---------------------------------------------------------------------------

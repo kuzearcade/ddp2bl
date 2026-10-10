@@ -10,7 +10,7 @@ Patch kinds
   reloc   : 32-bit operand $00D0xxxx -> SHWIN + xxxx, $00D10000/1 -> latch variable
             (absolute-long operands and immediates; same length, same cycles)
   latch   : the sequence-byte write to the latch (10 bytes) -> "jsr hle_latch_write" + 2 nops
-  boot    : the latch read in the start-up check -> "jsr hle_bootcheck" + nop
+  reset   : the cold-reset delay loop -> "jsr hle_reset" (ARM power-on state, same cycles)
 Only code below code_end is scanned; every hit must be an operand of a decoded
 instruction (never the opcode word), which the disassembly provides.
 """
@@ -123,8 +123,12 @@ def main():
     hook(s, _Sha1Expect("b1886ae752a2ca75603cf74549f0fd33f9a1ccc9", 16), syms["hle_send"], "send")
     latch_sites.remove(s + 6)
     patches[:] = [p for p in patches if not p["why"].startswith("latch:%06x" % (s + 6))]
-    # start-up check: its latch read -> jmp hle_bootcheck
-    hook(int(cfg["boot_hook"], 16), _Sha1Expect("211635ae7b4996386675bc5bba01a8d1de09d0b1", 8), syms["hle_bootcheck"], "boot")
+    # cold reset: the 1008-cycle delay loop (6 bytes, interrupts masked) -> "jsr hle_reset",
+    # which does what the ARM does at power-on in exactly that time
+    rs = int(cfg["reset_hook"], 16)
+    if prog[rs - base:rs - base + 6] != _Sha1Expect("f9134259607b2c845bc0ee44c8cae44e752c3b55", 6):
+        sys.exit("reset hook site %06x does not match the expected code" % rs)
+    add(rs, jsr(syms["hle_reset"]), "reset:%06x" % rs)
 
     # idle loop: its short branch to the poll loop -> "bra.s <trampoline>", trampoline
     # (unreachable error path of the idle-callback registration) -> "jmp hle_idle"

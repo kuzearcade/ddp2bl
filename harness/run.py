@@ -37,18 +37,24 @@ def read_exact(f, n):
     return buf
 
 
-def unrelocate(ram, win_base, win_size):
+def unrelocate(ram, win_base, win_size, locs=None):
     """Converted set: 32-bit pointers into the relocated shared window -> original $D0xxxx.
 
     The game keeps pointers to ASIC results in its own RAM; after relocation they point
     into the window. Raw share bytes are host order (68k word n = LE halfword at byte n),
-    so a 68k long $0081HHLL at an even offset is the byte sequence 81 00 LL HH."""
+    so a 68k long $0081HHLL at an even offset is the byte sequence 81 00 LL HH.
+    locs: the offsets where the reference run ever held such a pointer ($00D0xxxx). Only
+    those are converted; a value that merely looks like a window address elsewhere (e.g.
+    a BCD score "00819880") is the game's own data and stays as it is."""
     import re
     lo, hi = win_base & 0xffff, (win_base + win_size - 1) & 0xffff
     hi_byte = bytes([win_base >> 16 & 0xff, 0x00])
     out = bytearray(ram)
-    for m in re.finditer(re.escape(hi_byte) + b"(?=..)", ram, re.S):
-        i = m.start()
+    if locs is not None:
+        cand = (i for i in locs if ram[i:i + 2] == hi_byte)
+    else:
+        cand = (m.start() for m in re.finditer(re.escape(hi_byte) + b"(?=..)", ram, re.S))
+    for i in cand:
         if i & 1:
             continue
         v = ram[i + 2] | (ram[i + 3] << 8)
@@ -58,7 +64,16 @@ def unrelocate(ram, win_base, win_size):
     return bytes(out)
 
 
-def consume(fifo_path, out_dir, dump_frames, result, reloc=None):
+def window_pointer_locs(ram, win_size, locs):
+    """Reference run: collect offsets holding a 68k long $00D0xxxx (xxxx < win_size)."""
+    import re
+    for m in re.finditer(b"\xd0\x00(?=..)", ram, re.S):
+        i = m.start()
+        if not i & 1 and (ram[i + 2] | (ram[i + 3] << 8)) < win_size:
+            locs.add(i)
+
+
+def consume(fifo_path, out_dir, dump_frames, result, reloc=None, masks=(), ptrlocs=None, collect=None):
     hashes = open(os.path.join(out_dir, "hashes.txt"), "w")
     logical = open(os.path.join(out_dir, "logical.txt"), "w")
     frames = 0
@@ -75,9 +90,15 @@ def consume(fifo_path, out_dir, dump_frames, result, reloc=None):
                     (n,) = struct.unpack("<I", read_exact(f, 4))
                     secs.append(read_exact(f, n))
                 if reloc:
-                    secs[0] = unrelocate(secs[0], *reloc)
-                logical.write("%d %d %s %s\n" % (idx, vframe, hashlib.blake2b(secs[0], digest_size=8).hexdigest(),
-                                                hashlib.blake2b(secs[1], digest_size=8).hexdigest()))
+                    secs[0] = unrelocate(secs[0], *reloc, locs=ptrlocs)
+                if collect is not None:
+                    window_pointer_locs(secs[0], collect[1], collect[0])
+                masked = bytearray(secs[0])             # game-logic RAM: bookkeeping masked
+                for off, n in masks:
+                    masked[off:off + n] = bytes(n)
+                logical.write("%d %d %s %s %s\n" % (idx, vframe, hashlib.blake2b(secs[0], digest_size=8).hexdigest(),
+                                                   hashlib.blake2b(secs[1], digest_size=8).hexdigest(),
+                                                   hashlib.blake2b(bytes(masked), digest_size=8).hexdigest()))
                 if "L%d" % idx in dump_frames:
                     os.makedirs(os.path.join(out_dir, "dumps"), exist_ok=True)
                     with open(os.path.join(out_dir, "dumps", "L%08d.bin" % idx), "wb") as d:
@@ -92,7 +113,9 @@ def consume(fifo_path, out_dir, dump_frames, result, reloc=None):
                 (n,) = struct.unpack("<I", read_exact(f, 4))
                 secs.append(read_exact(f, n))
             if reloc:
-                secs[0] = unrelocate(secs[0], *reloc)
+                secs[0] = unrelocate(secs[0], *reloc, locs=ptrlocs)
+            if collect is not None:
+                window_pointer_locs(secs[0], collect[1], collect[0])
             hashes.write("%d %s\n" % (frame, " ".join(hashlib.blake2b(s, digest_size=8).hexdigest() for s in secs)))
             if frame in dump_frames:
                 os.makedirs(os.path.join(out_dir, "dumps"), exist_ok=True)
@@ -119,6 +142,8 @@ def main():
     ap.add_argument("--frames", type=int, required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--dump", default="", help="comma list of frames whose full state is saved")
+    ap.add_argument("--ptrlocs", help="reference run: where to write the offsets of its window pointers "
+                    "(default <out>/ptrlocs.txt); converted run: that file (pointer canonicalisation)")
     ap.add_argument("--mame", default=os.path.expanduser("~/DDP2_Repair/mame-ddp2bl/pgm"))
     ap.add_argument("--rompath", default=os.path.join(ROOT, "work", "roms"))
     ap.add_argument("--rtc", default=DEFAULT_RTC)
@@ -170,8 +195,19 @@ def main():
     result = {}
     import json
     tcfg = json.load(open(os.path.join(ROOT, "targets", a.target, "target.json")))
-    reloc = (int(tcfg["reloc_base"], 16), int(tcfg["reloc_size"], 16)) if a.machine.endswith("bl") else None
-    t = threading.Thread(target=consume, args=(fifo, out, {(x if x.startswith("L") else int(x)) for x in a.dump.split(",") if x}, result, reloc))
+    conv = a.machine.endswith("bl")
+    reloc = (int(tcfg["reloc_base"], 16), int(tcfg["reloc_size"], 16)) if conv else None
+    masks = [(int(m[0], 16) - 0x800000, m[1]) for m in tcfg.get("bookkeeping_masks", [])]
+    ptrlocs, collect = None, None
+    if conv:
+        if a.ptrlocs and os.path.exists(a.ptrlocs):
+            ptrlocs = sorted(int(x) for x in open(a.ptrlocs).read().split())
+        else:
+            print("warning: no --ptrlocs from the reference run: converting every window-like long")
+    else:
+        collect = (set(), int(tcfg["reloc_size"], 16))
+    t = threading.Thread(target=consume, args=(fifo, out, {(x if x.startswith("L") else int(x)) for x in a.dump.split(",") if x},
+                                               result, reloc, masks, ptrlocs, collect))
     t.start()
     with open(os.path.join(out, "mame.log"), "w") as log:
         rc = subprocess.call(cmd, env=env, stdout=log, stderr=subprocess.STDOUT)
@@ -181,6 +217,9 @@ def main():
         except OSError:
             pass
     t.join()
+    if collect is not None:
+        with open(a.ptrlocs or os.path.join(out, "ptrlocs.txt"), "w") as f:
+            f.write("\n".join(str(i) for i in sorted(collect[0])) + "\n")
     shutil.rmtree(tmp, ignore_errors=True)
     print("%s: rc=%d frames=%d" % (out, rc, result.get("frames", 0)))
     return rc

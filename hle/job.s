@@ -16,7 +16,7 @@ hle_run_job:
 	lea	SHWIN,a4
 	move.w	PENDING(a5),d0
 	clr.w	PENDING(a5)
-	cmpi.w	#$13,d0
+	cmpi.b	#$13,d0			; $13, or $113 once cmd 14 has answered "busy"
 	beq.s	.anim
 	bsr	cmd_12
 	bra	est_results

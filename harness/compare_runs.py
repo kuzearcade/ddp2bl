@@ -58,8 +58,9 @@ def main():
         ram_bad = [int(lr[i][0]) for i in range(n) if lr[i][2] != lt[i][2]]
         snd_bad = [int(lr[i][0]) for i in range(n) if lr[i][3] != lt[i][3]]
         vf_bad = [int(lr[i][0]) for i in range(n) if lr[i][1] != lt[i][1]]
+        ms_bad = [int(lr[i][0]) for i in range(n) if len(lr[i]) > 4 and len(lt[i]) > 4 and lr[i][4] != lt[i][4]]
         print("logical frames compared: %d (ref %d, test %d)" % (n, len(lr), len(lt)))
-        for name, b in (("game RAM", ram_bad), ("sound cmds", snd_bad), ("video frame", vf_bad)):
+        for name, b in (("game RAM", ram_bad), ("game-logic RAM", ms_bad), ("sound cmds", snd_bad), ("video frame", vf_bad)):
             rr = ranges(b)
             print("  %-11s differing: %-7d %s" % (name, len(b), " ".join("%d-%d" % x for x in rr[:12]) + (" ..." if len(rr) > 12 else "")))
         bad_any += ram_bad + snd_bad + vf_bad

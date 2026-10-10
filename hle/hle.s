@@ -166,7 +166,9 @@ snd_01:					; system init: no 68k-visible effect. The first one after
 	tst.w	HLEV+BOOTED		; 16	power-on is the ARM's resynchronisation, a longer path.
 	bne.s	.again			; 10 / 8
 	move.w	#1,HLEV+BOOTED		; 20
-	FIXED	E_CMD01BOOT,(16+8+20)
+	clr.w	HLEV+PENDING		; 20  (stale after a power cycle)
+	clr.l	HLEV+DEBT		; 28
+	FIXED	E_CMD01BOOT,(16+8+20+20+28)
 .again:	FIXED	E_CMD01,(16+10)
 snd_02:	FIXED	E_CMD02,0
 snd_03:	move.w	#1,SHWIN+$20		; 20  reset flag never left set
@@ -204,8 +206,8 @@ WAITE		macro
 		jmp	SEND_EXIT
 		endm
 
-; cmd 12 / 13: the ARM accepts the job and runs it in the background, while the 68k
-; idles; we run it in the game's idle loop (hle_idle) or, failing that, at cmd 14.
+; cmd 12 / 13: the ARM accepts the job and runs it in the background while the 68k
+; carries on with its frame; on the 68000 it runs at the next cmd 14 (snd_14_job).
 snd_13:	move.w	#$13,HLEV+PENDING	; 20  (a job left pending is run by cmd 14 first)
 	bra.s	snd_1213		; 10
 snd_12:	move.w	#$12,HLEV+PENDING	; 20
@@ -227,9 +229,9 @@ E12TAB:	E12TAB_DATA			; extra polls for cmd 12 by request count
 ; cycle accounting in job.s) minus what the original spent in this send() (266 + E*94)
 ; is added to DEBT, which hle_idle repays modulo the 330-cycle polling period so that
 ; the frame's vblank lands in the polling loop exactly as in the original.
-;   fixed cycles here: 172 (prologue) + 16 + 10 + 174 + 376 = 748, so
-;   debt = a3 + 748 - 266 - 94*E = a3 + 482 - 94*E
-snd_14_job:				; after prologue (172) + tst (16) + bne taken (10)
+;   fixed cycles here: 172 (prologue) + 20 + 8 + 16 + 10 + 174 + 376 = 776, so
+;   debt = a3 + 776 - 266 - 94*E = a3 + 510 - 94*E
+snd_14_job:				; after prologue (172) + cmpi (20) + beq (8) + tst (16) + bne (10)
 	movem.l	d0-d7/a0-a6,-(sp)	; 128
 	suba.l	a3,a3			;   8
 	move.l	a3,HLEV+PROBE		;  20  probe 0
@@ -239,7 +241,7 @@ snd_14_job:				; after prologue (172) + tst (16) + bne taken (10)
 	move.w	HLEV+E14,d1		;  16
 	mulu.w	#94,d1			;  52
 	sub.l	d1,d0			;   8
-	addi.l	#482,d0			;  16
+	addi.l	#510,d0			;  16
 	add.l	d0,HLEV+DEBT		;  28
 	move.w	#1,SHWIN+$20		;  20  done
 	move.w	HLEV+E14,d2		;  16
@@ -250,11 +252,23 @@ snd_14_job:				; after prologue (172) + tst (16) + bne taken (10)
 	jmp	SEND_EXIT		;  12
 
 ; cmd 14: results are ready (no job pending): exact original timing
-snd_14:	tst.w	HLEV+PENDING		; 16
+snd_14:	cmpi.w	#$13,HLEV+PENDING	; 20
+	beq.s	snd_14_busy		;  8 / 10
+	tst.w	HLEV+PENDING		; 16
 	bne.s	snd_14_job		;  8 / 10
 	move.w	#1,SHWIN+$20		; 20  done
-	move.w	HLEV+E14,d2		; 16  = 60
-	WAITE	60
+	move.w	HLEV+E14,d2		; 16  = 88
+	WAITE	88
+
+; cmd 14 right after cmd 13: the game sends it ~2400 cycles after cmd 13, while the
+; ARM is still running the animation job (3870-4030 ARM cycles, measured), so the
+; ARM answers "not done" at once and packs nothing; the game waits ~18700 cycles and
+; asks again (the job has long finished by then). Mark the job as reported busy
+; ($113: hle_run_job only looks at the low byte); the next cmd 14 runs it.
+snd_14_busy:				; after prologue (172) + cmpi (20) + beq taken (10)
+	move.w	#$113,HLEV+PENDING	; 20
+	clr.w	SHWIN+$20		; 20  not done
+	FIXED	E_CMD14BUSY,(20+10+20+20)
 
 ; cmd 11: EST reset, once at start-up: fixed 574 + a3 vs original 266 + 12*94 = 1394
 snd_11:	movem.l	d0-d7/a0-a6,-(sp)	; 128
@@ -275,8 +289,9 @@ snd_11:	movem.l	d0-d7/a0-a6,-(sp)	; 128
 ; Reached once per frame from the game's "wait for vblank" routine, at the point
 ; where its message queue is drained and it starts polling (hook: "bra.s" ->
 ; trampoline "jmp"). That polling loop has a fixed period of 330 cycles, so
-; delaying its start by exactly 330 changes nothing: frames without a job cost
-; exactly one period. With a job pending we run it here, where the ARM ran it.
+; delaying its start by a multiple of 330 changes nothing. We delay it by
+; -DEBT mod 330 (+k*330): the loop then resumes in the phase it had in the
+; original, which did not spend the job's time on the 68000.
 ; ---------------------------------------------------------------------------
 hle_idle:				; 12 (trampoline jmp; the hooked bra.s costs 10 like the original)
 	movem.l	d0-d2,-(sp)		;  32
@@ -327,23 +342,28 @@ hle_pack:
 
 
 ; ---------------------------------------------------------------------------
-; hle_bootcheck
-; Entered by "jmp" in place of the game's start-up latch check (it clears d2,
-; reads the latch into it and branches when ready). The ARM is always ready by then (latch
-; $81), so the original reaches BOOT_EXIT 94 cycles after the hook. We set up
-; what the firmware has prepared: the region word at shared RAM offset 0 (the
-; rest of the ARM-side state is zero at power-on, like main RAM in MAME), and
-; replay the original's local variable store.
+; hle_reset
+; Called ("jsr", 20) in place of the 1008-cycle delay loop (6 bytes)
+; that the game's cold-reset entry runs with interrupts masked. A reset also resets the
+; ARM, which then prepares the region word at shared RAM offset 0 and shows "ready"
+; ($81) at its latch. The game's start-up check reads that latch (relocated to LATCH):
+; $81 once after a reset, afterwards the echo of the last command, exactly as before.
+; Main RAM is battery backed, so the rest of our state from a previous session is also
+; reset here. Same cycles and the same d0 ($0000FFFF) as the replaced loop.
 ; ---------------------------------------------------------------------------
-hle_bootcheck:				; 12 (jmp)
+hle_reset:				; 20 (jsr)
 	move.l	#0,SHWIN		; 28  region word: words +0 = low, +2 = high; the immediate
 					;     is filled in at build time from the ARM internal ROM
 					;     (patch "region", tools/ddp2bl_build.py)
-	move.l	#$c350,-4(a6)		; 24
-	moveq	#0,d2			;  4
-	move.b	#$81,d2			;  8
-	PAD	6
-	jmp	BOOT_EXIT		; 12  = 94
+	move.b	#$81,HLEV+LATCH		;  20
+	clr.w	HLEV+BOOTED		;  20
+	clr.w	HLEV+PENDING		;  20
+	clr.l	HLEV+DEBT		;  28
+	moveq	#83,d0			;   4
+.d:	dbra	d0,.d			; 830 + 14
+	nop				;   4
+	nop				;   4
+	rts				;  16  = 20 + 116 + 856 + 16 = 1008
 
 
 ; ---------------------------------------------------------------------------

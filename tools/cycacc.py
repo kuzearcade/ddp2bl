@@ -166,7 +166,8 @@ def mul_n(v, signed):
 
 
 class Insn:
-    __slots__ = ("mn", "size", "ops", "cycles", "kind", "taken", "nottaken", "targets", "text", "dyn")
+    __slots__ = ("mn", "size", "ops", "cycles", "kind", "taken", "nottaken", "targets", "text", "dyn",
+                 "unlikely", "target_text")
 
 
 def timing(mn, size, ops, comment, syms):
@@ -273,6 +274,8 @@ def main():
     ap.add_argument("output")
     ap.add_argument("--symbols", action="append", default=[])
     ap.add_argument("--report", action="store_true")
+    ap.add_argument("--entry", action="append", default=[],
+                    help="label entered from outside the accounted code (potential 0)")
     a = ap.parse_args()
 
     syms = {}
@@ -292,8 +295,33 @@ def main():
     items = []          # ("label", name) | ("insn", Insn, raw) | ("raw", raw)
     scope = ""
     targets = set()
+    table_targets = set()
+    manual = False        # inside "; @cyc-off" .. "; @cyc-on": code that accounts for itself
     for raw in lines:
         code, com = split_comment(raw)
+        if not code.strip() and "@cyc-off" in com:
+            manual = True
+            items.append(("raw", raw))
+            continue
+        if not code.strip() and "@cyc-on" in com:
+            manual = False
+            items.append(("raw", raw))
+            continue
+        mq = re.match(r"^(\w+)\s+equ\s+(.+)$", code.strip())
+        if mq and not raw[:1].isspace():
+            syms[mq.group(1)] = imm_value("#" + mq.group(2).strip(), syms)
+            items.append(("raw", raw))
+            continue
+        if manual:
+            # passed through verbatim (no markers, branch sizes kept); the code adds its
+            # own cycles with "@cyc-adjust" instructions; labels here are internal only
+            if re.search(r"\ba3\b", code, re.I) and "@cyc-adjust" not in com:
+                raise SystemExit("a3 is reserved for accounting: %s" % raw)
+            mm = re.match(r"^([.\w]+):", code)
+            if mm and not mm.group(1).startswith("."):
+                raise SystemExit("global label inside a @cyc-off region: %s" % raw)
+            items.append(("raw", raw))
+            continue
         if not code.strip():
             items.append(("raw", raw))
             continue
@@ -324,13 +352,17 @@ def main():
         if mn in ("dc", "ds", "even", "align", "cnop", "equ", "set"):
             items.append(("raw", "\t" + rest + ("\t" + com if com else "")))
             for lab in re.findall(r"([.\w]+)-[.\w]+", opstr):
-                targets.add(scope + lab if lab.startswith(".") else lab)
+                q = scope + lab if lab.startswith(".") else lab
+                targets.add(q)
+                table_targets.add(q)
             continue
         ops = split_operands(opstr)
         if re.search(r"\ba3\b", opstr, re.I) and "@cyc-adjust" not in com:
             raise SystemExit("a3 is reserved for accounting: %s" % raw)
         ins = Insn()
         ins.mn, ins.size, ins.ops, ins.text, ins.dyn = mn, size, ops, "\t" + rest + ("\t" + com if com else ""), "@cyc-adjust" in com
+        ins.unlikely = "@unlikely" in com
+        ins.target_text = ops[-1] if ops else None
         t = timing(mn, size, ops, com, syms)
         ins.cycles, ins.kind = t
         ins.targets = []
@@ -351,66 +383,178 @@ def main():
                 ins.cycles = 10
         items.append(("insn", ins))
 
-    # pass 2: blocks. A block starts at a target label or after a control transfer.
-    out = []
-    pending = []          # instructions of the current block
-    block_open = False
-    corr = 0              # fall-through correction owed by the previous block
-    nblocks = 0
-
-    def marker_line(n):
-        # LEA does not touch the condition codes (blocks may start right after a
-        # conditional branch whose flags the next branch still uses)
-        return "\tlea\t%d(a3),a3\t\t; [cyc] block" % n
-
-    def flush():
-        nonlocal pending, block_open, nblocks
-        if not block_open:
-            return
-        cost = sum(i.cycles if i.kind != "cond" and i.kind != "dbra" else i.taken for i in pending)
-        out.insert(block_start_idx[0], marker_line(cost + corr_at_start[0] + MARK))
-        nblocks += 1
-        pending = []
-        block_open = False
-
-    block_start_idx = [0]
-    corr_at_start = [0]
-    last_kind = "rts"     # code before the first label is unreachable unless labelled
-    for it in items:
+    # pass 2: basic blocks. A block starts at a target label or after a control transfer
+    # (calls do not end blocks: the callee accounts for itself).
+    blocks = []           # dict(start=index in items, insns, term, labels, taken, fall)
+    label_block = {}
+    cur = None
+    pending_labels = []
+    for idx, it in enumerate(items):
         if it[0] == "label":
             if it[1] in targets:
-                if block_open:
-                    flush()
-                if corr:
-                    # fall-through into a target label after a conditional branch:
-                    # separate correction marker executed only on the fall-through path
-                    out.append("\tlea\t%d(a3),a3\t\t; [cyc] fall-through" % (corr + MARK))
-                    corr = 0
-            out.append(it[2] + ":" if not it[2].startswith(".") else it[2] + ":")
+                if cur is not None:
+                    cur["term"] = "fall"
+                    cur = None
+                pending_labels.append(it[1])
             continue
-        if it[0] == "raw":
-            out.append(it[1])
+        if it[0] != "insn":
             continue
         ins = it[1]
-        if not block_open:
-            block_open = True
-            block_start_idx[0] = len(out)
-            corr_at_start[0] = corr
-            corr = 0
-        out.append(ins.text)
-        pending.append(ins)
-        if ins.kind != "normal":
-            flush()
-            if ins.kind == "cond" or ins.kind == "dbra":
-                corr = ins.nottaken - ins.taken
-            else:
-                corr = 0
-    if block_open:
-        flush()
+        if cur is None:
+            cur = dict(first=idx, insns=[], term=None, labels=pending_labels, n=len(blocks))
+            for lab in pending_labels:
+                label_block[lab] = cur["n"]
+            pending_labels = []
+            blocks.append(cur)
+        cur["insns"].append(ins)
+        if ins.kind in ("cond", "dbra", "bra", "jmp", "rts"):
+            cur["term"] = ins.kind
+            cur = None
+    if cur is not None:
+        cur["term"] = "fall"
+    for i, b in enumerate(blocks):
+        last = b["insns"][-1]
+        b["taken"] = None
+        b["fall"] = i + 1 if b["term"] in ("fall", "cond", "dbra") and i + 1 < len(blocks) else None
+        if b["term"] in ("cond", "dbra", "bra"):
+            b["taken"] = label_block[last.targets[0]]
+        b["calls"] = [label_block[i_.targets[0]] for i_ in b["insns"] if i_.kind == "call" and i_.targets]
+
+    # potentials: a marker on edge u->v must add cost(u) + phi(v) - phi(u); a path from
+    # an entry e to a return then adds its exact cost - phi(e). Entries reached from
+    # outside (and computed-dispatch targets, whose callers cannot know which one runs)
+    # get phi = 0; a direct call adds the callee's phi to the caller's cost. Each block
+    # takes phi = its cost + phi(taken successor) when free, so only diverging costs need
+    # markers. Loop heads (targets of back edges) are pinned to 0.
+    FIXED = set(a.entry)
+    fixed = set(label_block[l] for l in FIXED if l in label_block)
+    fixed |= set(label_block[l] for l in table_targets if l in label_block)
+    state = {}
+
+    def succs(n):
+        b = blocks[n]
+        return [x for x in (b["taken"], b["fall"]) if x is not None] + b["calls"]
+
+    import sys as _sys
+    _sys.setrecursionlimit(100000)
+
+    def dfs(n):
+        state[n] = 1
+        for m in succs(n):
+            if state.get(m) == 1:
+                if m in blocks[n]["calls"]:
+                    raise SystemExit("recursion through %s" % blocks[m]["labels"])
+                fixed.add(m)                       # back edge: loop head
+            elif m not in state:
+                dfs(m)
+        state[n] = 2
+    for n in range(len(blocks)):
+        if n not in state:
+            dfs(n)
+
+    phi = {}
+
+    def base_cost(n):
+        b = blocks[n]
+        c = 0
+        for i_ in b["insns"]:
+            c += i_.taken if i_.kind in ("cond", "dbra") else i_.cycles
+            if i_.kind == "call" and i_.targets:
+                c += get_phi(label_block[i_.targets[0]])
+        return c
+
+    def unlikely(n):
+        b = blocks[n]
+        return b["term"] == "cond" and b["insns"][-1].unlikely and b["fall"] is not None
+
+    def out_phi(n):
+        """phi (+ timing difference) of the successor whose edge needs no marker of its own:
+        the taken one, or for a branch marked "@unlikely" the fall-through one (its taken
+        edge then goes through a stub carrying the correction)"""
+        b = blocks[n]
+        if b["term"] in ("rts", "jmp"):
+            return 0
+        if unlikely(n):
+            last = b["insns"][-1]
+            return (last.nottaken - last.taken) + get_phi(b["fall"])
+        if b["term"] in ("cond", "dbra", "bra"):
+            return get_phi(b["taken"])
+        return get_phi(b["fall"]) if b["fall"] is not None else 0
+
+    def get_phi(n):
+        if n in fixed:
+            return 0
+        if n not in phi:
+            phi[n] = None
+            phi[n] = base_cost(n) + out_phi(n)
+        if phi[n] is None:
+            raise SystemExit("potential cycle at %s" % blocks[n]["labels"])
+        return phi[n]
+
+    inserts = []          # (item index, line) inserted before that item
+    stubs = {}            # item index -> lines of @unlikely stubs inserted before it
+    nmark = 0
+    for n, b in enumerate(blocks):
+        m = base_cost(n) + out_phi(n) - get_phi(n)
+        if m:
+            inserts.append((b["first"], "\tlea\t%d(a3),a3\t\t; [cyc] block" % (m + MARK)))
+            nmark += 1
+        if unlikely(n):
+            # taken edge: needs base_cost + phi(T) - phi(u) in total, m of it is done
+            last = b["insns"][-1]
+            w = base_cost(n) + get_phi(b["taken"]) - get_phi(n) - m
+            if w:
+                stub = ".cyc_stub%d" % n
+                k = next((i_ for i_ in range(b["first"], len(items)) if items[i_][0] == "insn"
+                          and items[i_][1] is last), None)
+                # place the stub after the next unconditional transfer in the same scope
+                j = k + 1
+                while j < len(items):
+                    it = items[j]
+                    if it[0] == "label" and not it[2].startswith("."):
+                        j = None
+                        break
+                    if it[0] == "insn" and it[1].kind in ("rts", "bra", "jmp"):
+                        break
+                    j += 1
+                if j is None or j >= len(items):
+                    raise SystemExit("no place for the @unlikely stub of %s" % last.text.strip())
+                last.text = last.text.replace(last.target_text, stub, 1)
+                stubs.setdefault(j + 1, []).extend([
+                    stub + ":",
+                    "\tlea\t%d(a3),a3\t\t; [cyc] unlikely edge" % (w + MARK + 10),
+                    "\tbra\t%s" % last.target_text])
+                nmark += 1
+        elif b["term"] in ("cond", "dbra") and b["fall"] is not None:
+            last = b["insns"][-1]
+            f = (last.nottaken - last.taken) + get_phi(b["fall"]) - get_phi(b["taken"])
+            if f:
+                # after the branch, before the next block's labels: fall-through path only
+                nxt = blocks[b["fall"]]["first"]
+                while nxt > 0 and items[nxt - 1][0] in ("label", "raw"):
+                    nxt -= 1
+                inserts.append((nxt, "\tlea\t%d(a3),a3\t\t; [cyc] fall-through" % (f + MARK)))
+                nmark += 1
+    at = {}
+    for i_, line in inserts:
+        at.setdefault(i_, []).append(line)
+    for i_, lines_ in stubs.items():
+        at.setdefault(i_, [])[:0] = lines_
+    out = []
+    for idx, it in enumerate(items):
+        for line in at.get(idx, []):
+            out.append(line)
+        if it[0] == "label":
+            out.append(it[2] + ":")
+        elif it[0] == "raw":
+            out.append(it[1])
+        else:
+            out.append(it[1].text)
+    nblocks = len(blocks)
     open(a.output, "w").write("; generated by tools/cycacc.py from %s - do not edit\n" % os.path.basename(a.source)
                               + "\n".join(out) + "\n")
     if a.report:
-        print("blocks: %d" % nblocks)
+        print("blocks: %d, markers: %d" % (nblocks, nmark))
 
 
 if __name__ == "__main__":

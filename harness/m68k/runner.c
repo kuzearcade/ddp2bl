@@ -39,8 +39,19 @@ void m68k_write_memory_8(unsigned int a, unsigned int v)  { wr8(a, v); }
 void m68k_write_memory_16(unsigned int a, unsigned int v) { wr8(a, v >> 8); wr8(a + 1, v); }
 void m68k_write_memory_32(unsigned int a, unsigned int v) { m68k_write_memory_16(a, v >> 16); m68k_write_memory_16(a + 2, v); }
 
+/* optional profile: cycles per instruction address (prof_on), attributed when the next one starts */
+static uint32_t prof[MEMSIZE / 2];
+static int prof_on;
+static int64_t slice_base, prof_last;
+static uint32_t prof_pc;
+
 void instr_hook(unsigned int pc)
 {
+	if (prof_on) {
+		int64_t now = slice_base + m68k_cycles_run();
+		if (prof_pc) prof[(prof_pc & 0xffffff) >> 1] += (uint32_t)(now - prof_last);
+		prof_last = now; prof_pc = pc;
+	}
 	if ((pc & 0xffffff) == RETURN_MAGIC) { stopped = 1; m68k_end_timeslice(); }
 }
 
@@ -72,10 +83,17 @@ int64_t m68r_call(uint32_t pc, uint32_t sp, int64_t max_cycles)
 	m68k_set_reg(M68K_REG_SP, sp);
 	m68k_set_reg(M68K_REG_PC, pc);
 	stopped = 0;
-	while (!stopped && total < max_cycles)
+	slice_base = 0; prof_last = 0; prof_pc = 0;
+	while (!stopped && total < max_cycles) {
 		total += m68k_execute(1000);
+		slice_base = total;
+	}
 	if (!stopped) return -1;
 	/* Musashi counts the cycles of the RTS that jumped to the magic address; that RTS is
 	   part of the routine, but the hook fired before executing anything at the magic PC. */
 	return total;
 }
+
+void m68r_prof(int on) { prof_on = on; }
+void m68r_prof_get(uint32_t lo, uint32_t n, uint32_t *out) { memcpy(out, prof + (lo >> 1), n * 4); }
+void m68r_prof_clear(void) { memset(prof, 0, sizeof(prof)); }

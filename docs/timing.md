@@ -1,48 +1,132 @@
-# Timing measurements (feasibility gate)
+# Timing design and measurements
 
-Reference: protected `ddp2` in the ddp2bl MAME branch, speedups disabled (`DDP2_NOSPEEDUP`),
-default scheduler quantum, bot run seed 1 with lives+invulnerability cheats, 20000 frames
-(`work/runs/cap1`). Tools: `tools/capture.py summary`, `tools/timing.py`.
+## Reference
 
-## Handshake
+The protected set is emulated with **per-cycle CPU interleave** (`DDP2_PERFECT`), speedups
+off. Under MAME's default scheduler the ARM's response to the same command varies with
+scheduler phase (e.g. 2 or 3 polls for the same cheap command, and spurious "job not done"
+answers to cmd 14 that never occur with fine interleave), so the default-scheduler run is not
+a deterministic reference. With per-cycle interleave the ARM really runs concurrently with
+the 68000, which is what the hardware does.
 
-Every command — including cmd 14 — was answered on the **first poll**: 148 68k cycles from the
-latch write to the echo, so `$80ECAE` (poll budget) always ends at 9999 and `$808C9D` holds the
-echoed sequence. cmd 14 never answered "not done" (0 of 17931).
+## How the original spends 68000 time on the ASIC
 
-## Command mix per frame
+A gameplay frame (measured): vblank interrupt (the handler takes ~14,000 cycles before it
+counts the vblank) → frame start → **09, 0A, 12** → 36,000-49,000 cycles of game code while
+the ARM runs the bullet job → **14** (collect) → **04** → the game's vblank wait (idle loop).
 
-| mix | frames |
-|---|---|
-| 04, 09, 0A, 12, 14 | 14880 |
-| 04, 09, 0A, 14 | 1043 |
-| 04, 09, 0A, 12×2, 14 | 1043 |
-| 04 only | 868 |
-| 04, 09 | 541 |
+`send()` (hook at `$145922`) writes the command, posts the sequence byte to the latch at
++16..+44 cycles, then polls: poll *k* starts at +172 + 94(*k*-1). It returns at
+`266 + E*94`, E = extra polls = `ceil((D - 146) / 94)` for an ARM reply D cycles after the
+latch write:
 
-## EST (bullet) job cost on the ARM
+| cmd | ARM reply D (cycles) | E |
+|---|---|---|
+| 01 (first after a reset: ARM resynchronisation) | 254 | 2 |
+| 01, 02, 03, 04, 09, 0A | 158-194 | 1 |
+| 11, 16, 17 | ~1270 | 12 |
+| 12 | 360 + j (n = 0), 356 + 54n + j (n requests) | table |
+| 13 | 360 + j | 3 |
+| 14 | 4047 + 30·n(1-3) + 54·n4 + 34·n5 + 49·n(6,7) + (2 + 9·removed, if any) + j | from the job |
+| 14 right after 13 ("busy", see below) | 160 | 1 |
 
-17931 jobs: 5014 / 6720 / 18243 / 25088 ARM cycles (min / median / p99 / max).
-Worst frame total: ~39400 ARM cycles (two jobs in one frame).
+`j` is ARM-side jitter: {0, 3, 6, 9} for cmd 12 (6 in 77% of sends, 9 in 17%), {0, 3} for
+cmd 14 (0 in 82%). It depends on where the ARM's idle loop is when the latch write arrives
+(it correlates only with the ARM-internal time since its previous reply), which the 68000
+cannot observe. The replacement uses the most frequent value. Measured over the three
+60,000-frame reference runs (519,000 interrupt-free cmd 12/14 sends): the poll count is
+predicted exactly for 99.95% of cmd 12 and 99.40% of cmd 14 sends; the rest are ±1 poll.
 
-## 68k idle time
+**Busy answer.** After cmd 13 (animation-only job, used e.g. on the continue screen) the
+game sends cmd 14 about 2,400 cycles later, while the ARM is still animating (3,871-4,024
+cycles measured). The ARM answers "not done" at once without packing, the game busy-waits
+1,024 loop passes (~18,700 cycles) and asks again; by then the job has long finished
+(17,350+ cycles of margin). The replacement reproduces this (1,514 of 1,514 occurrences).
 
-Frame = 337920 68k cycles. Idle (game waiting for vblank) per frame: p1 = 184800, median 241230.
-In frames that run an EST job the minimum idle was ~164000 cycles; the highest
-job/idle ratio was 0.20. 15 frames had no idle at all (boot/transition frames, no EST job).
+**Interrupts during a send.** An interrupt taken between the latch write and a poll delays
+that poll by the handler's run time; if the reply has arrived by then, the send ends with
+fewer polls. The vblank handler (IRQ6, ~14,000 cycles) always ends the wait at the next
+poll; the scanline-0 handler (IRQ4, ~51,100 cycles into the frame) takes 660-668 cycles
+(its autovector acknowledge is synchronised to the 68000 E clock). The replacement's long
+waits end at the next poll after an IRQ6 like the original; IRQ4 effects are not modelled
+(2.5% of frames have one inside a send; see "residual" below).
 
-## Interrupts
+## What the 68000 replacement does
 
-* IRQ6 (vblank start): frame tasks (`$14808A`). Lands in the idle loop whenever the frame's
-  work finished in time.
-* IRQ4 (scanline 0): `$147EAE`, only `bclr/bset #2,$80ECCF` + write `$B0E000` (ack). Atomic and
-  state-neutral with respect to where it lands.
+* cmds 01-0A, 16/17, the busy 14: the command's effect plus a pad to exactly `266 + E*94`
+  cycles, with the same RAM side effects as the original poll loop (sequence/echo bytes,
+  status word, poll counter residue).
+* cmd 12/13: accept the job (cycle-exact, E from the cmd 12 table).
+* cmd 14: run the job and pack the results, then record
+  `debt = cost - (266 + E*94)` — extra 68000 time the original did not have (the ARM did
+  the work in parallel). The job code is **cycle accounted** (`tools/cycacc.py`), so its
+  exact cost is known at run time.
+* idle hook (the game's vblank wait, once per frame): burns `-debt mod 330` (+k·330) cycles
+  so the 330-cycle polling loop resumes in the original's phase.
+* reset hook: the cold-reset entry's 1,008-cycle delay loop (interrupts masked) is replaced
+  by a routine of exactly that length that sets up what the ARM does at power-on (region
+  word, latch "ready" `$81`). The game's start-up check then runs unmodified against the
+  relocated latch: `$81` once after a reset, afterwards the echo of the last command,
+  exactly like the original (it is called twice during a boot). The boot timeline is
+  identical to the reference up to the first gameplay frame.
 
-## Consequences for the 68000 replacement
+## Cycle accounting
 
-* Frames with idle time: extra 68k cycles are invisible at frame boundaries as long as the
-  replacement's added cost stays below that frame's idle time → EST port budget ≈ 4× ARM cycles
-  in the worst observed frame (needs confirming on heavier late-game scenes / 2P).
-* Frames without idle (slowdown): extra cycles can change the lag pattern. Cheap commands are
-  padded to the original handshake cost; EST frames that lag must be measured specifically
-  (longer and 2-player runs).
+`tools/cycacc.py` turns `hle/job.s` into `job_acc.s`. It assigns each basic block a
+potential φ (cost to the end of the routine along a chosen path) and inserts
+`lea N(a3),a3` only where paths with different costs diverge: on the fall-through edge of a
+branch whose taken edge is free, or through an out-of-line stub for a branch marked
+`@unlikely` (keeping the common path marker-free). Calls add the callee's potential;
+jump-table targets and loop heads are fixed at 0. Two loops account for themselves
+(`@cyc-off` regions): the update dispatch and the result packer, which add per-state costs
+from their own counts. 171 markers for 298 blocks (was one per block); on the heaviest
+job the markers cost 13% before this change.
+
+**Verified against MAME** (`DDP2BL_PROBE`, `tools/probe_check.py`): measured − accounted
+= 38 for every job no interrupt hit (1,807 of 1,876 in a 3,000-frame run; the others were
+hit by IRQ4). 38 is exactly the probe overhead (`bsr` 18 + `move.l` 20). (The Musashi
+bench is not a timing reference for MULS/MULU and `ANDI.L #,Dn`; MAME and the MC68000
+manual agree.)
+
+## Is there enough time? (`tools/margin.py`)
+
+On the 68000 the job is extra time between cmd 12 and the vblank wait. The conversion stays
+frame-exact as long as that extra time is less than the time the original game had left
+before the vblank interrupt in the same frame. From full-length captures of the three
+reference runs (57,000-58,000 gameplay frames each) and the job cost of every frame
+(`harness/hle_stream_test.py --jobs-out`):
+
+| run | worst frame margin | worst debt / slack | frames with debt/slack > 0.7 |
+|---|---|---|---|
+| L1p (1 player, invulnerable) | 34,487 cycles | 0.79 | 2 |
+| L2p (2 players, invulnerable) | 38,915 cycles | 0.74 | 14 |
+| Lnc (no cheats) | 61,081 cycles | 0.71 | 1 |
+
+The worst frames are bursts in which ~120 bullets turn into falling debris at once. An
+earlier build (job 25% slower) was late by 384 cycles in one such frame; the job was then
+optimised (cycle markers, packer, update dispatch, state-5/animation code) from 171,660 to
+137,274 cycles on that frame, with all outputs unchanged.
+
+## Residual differences (measured, by design or unavoidable)
+
+* **Sub-frame timing after cmd 14**: the 68000 timeline between cmd 14 and the vblank wait
+  is shifted by the job's cost, so the sound CPU sees the frame's later sound commands a few
+  thousand cycles later (same commands, same frame). Z80 RAM sampled at the video frame
+  boundary differs; sound output is the same commands in the same frames.
+* **Idle-loop phase**: the phase lock repays the job exactly, but the original's own phase
+  also depends on things a 68000 cannot know: the ARM's reply jitter (±1 poll in 0.6% of
+  cmd 14 sends) and how long IRQ4's acknowledge takes when it lands in different code. A
+  phase difference persists until both sets resynchronise. It changes which instruction
+  of the vblank-wait loop the vblank interrupt lands on, nothing in game logic: the game
+  advances by frames, reads inputs and sends sound commands in the vblank handler.
+  Consequences that show up in RAM:
+  - the once-a-minute clock poll (vblank-wait callback `$149DC0`: countdown `$80EE50`,
+    last vblank `$80EE54`, clock copy `$80EE40`, and the BIOS running-time record
+    `$8021E2-$8021ED` it updates through a BIOS call) can run one frame earlier or later;
+  - the poll-counter residue `$80ECAE` (read only by the protocol error reporter);
+  - stale stack bytes, and through a game bug VRAM: the background row writer at
+    `$13F4C6` stores a tile as a long from its stack frame after setting only the high word, so
+    the tile attribute is whatever an earlier interrupt frame left at `-2(a6)`. In the
+    L2p run 160 background attribute words differ for several thousand frames (`$0003` in the
+    original, `$0002` converted); every rendered pixel is identical (the tiles are blank). On the original
+    hardware this value depends on the same interrupt timing.

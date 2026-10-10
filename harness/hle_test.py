@@ -24,7 +24,7 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(ROOT, "tools"))
 sys.path.insert(0, os.path.join(HERE, "m68k"))
 from capture import read_capture  # noqa: E402
-from m68r import M68k  # noqa: E402
+from m68r import M68k, A4, A5  # noqa: E402
 
 # must match hle/hle.s and the generated target.inc
 SYMS = {}
@@ -183,7 +183,30 @@ def main():
         cpu.load(SYMS["SEQVAR"], bytes([seq]))
         cpu.set_reg(2, cmd)            # D2 = command
         try:
-            c = cpu.call(SYMS["hle_send"], max_cycles=5_000_000)
+            if cmd == 0x14:
+                # the ARM ran the job in the background before this command (the captured
+                # ARM state already has it), so cmd 14 only packs: compare the packer and
+                # the reply word. Busy answers and all timing: harness/hle_stream_test.py
+                c = cpu.call(SYMS["hle_pack"], max_cycles=5_000_000)
+                busy = mshared[0x20] == 0 and mshared[0x21] == 0
+                if busy:
+                    # captured mid-job (the ARM is still animating): no per-command
+                    # comparison possible; hle_stream_test.py checks these exactly
+                    st["busy"] += 1
+                    n += 1
+                    continue
+                else:
+                    cpu.load(shw + 0x20, b"\x00\x01")
+                cpu.load(hlev + LATCH_OFF, bytes([reply]))
+            else:
+                c = cpu.call(SYMS["hle_send"], max_cycles=5_000_000)
+                if cmd in (0x12, 0x13):
+                    # the ARM starts the job right away (the model runs it here); ours
+                    # runs at cmd 14: run the job body now, without packing
+                    cpu.load(hlev + 0x238A, b"\0\0")        # PENDING
+                    cpu.set_reg(A4, shw)
+                    cpu.set_reg(A5, hlev)
+                    cpu.call(SYMS["cmd_12" if cmd == 0x12 else "cmd_13"], max_cycles=5_000_000)
         except RuntimeError as e:
             print("frame %d cmd %02x: 68000 %s" % (ev.frame, cmd, e))
             st["bad"] += 1
@@ -229,7 +252,7 @@ def main():
         n += 1
         if a.limit and n >= a.limit:
             break
-    print("commands: %d  ok %d  bad %d" % (n, st["ok"], st["bad"]))
+    print("commands: %d  ok %d  bad %d  (cmd 14 busy answers: %d)" % (n, st["ok"], st["bad"], st["busy"]))
     print("68000 cycles per command (Musashi) min/avg/max:")
     for c, l in sorted(cyc.items()):
         print("  %02x n=%-7d %d / %d / %d" % (c, len(l), min(l), sum(l) // len(l), max(l)))

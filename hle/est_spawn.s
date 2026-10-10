@@ -150,17 +150,17 @@ copy_anim_1800:
 	; a1 = T_ANIM + 8*O_ABASE + 8*frame(d0.w), 32-bit arithmetic like the ARM
 	moveq	#0,d1
 	move.w	O_ABASE(a0),d1
+	andi.l	#$ffff,d0
+	add.l	d0,d1
 	lsl.l	#3,d1
 	lea	T_ANIM,a1
 	adda.l	d1,a1
-	moveq	#0,d1
-	move.w	d0,d1
-	lsl.l	#3,d1
-	adda.l	d1,a1
-	move.l	(a1)+,O_SPR(a0)
+	move.w	(a1)+,d0
+	andi.w	#$e0ff,d0
+	ori.w	#$1800,d0
+	move.w	d0,O_SPR(a0)
+	move.w	(a1)+,O_SPR+2(a0)
 	move.l	(a1),O_SPR+4(a0)
-	andi.w	#$e0ff,O_SPR(a0)
-	ori.w	#$1800,O_SPR(a0)
 	rts
 
 ; ---------------------------------------------------------------------------

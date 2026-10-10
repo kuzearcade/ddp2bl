@@ -25,7 +25,6 @@ def main(target, arm_internal, out):
         "SEND_EXIT\tequ\t%s" % h("send_exit"),
         "VBLCNT\t\tequ\t%s" % h("vbl_counter"),
         "IDLE_RESUME\tequ\t%s" % h("idle_resume"),
-        "BOOT_EXIT\tequ\t%s" % h("boot_exit"),
         "SINTAB\t\tequ\t%s" % h("rom_sintab"),
         "AIMTAB\t\tequ\t%s" % h("rom_aimtab"),
         "AIMTAB_SIZE\tequ\t$%X" % (0x4000 - 0x2C90),
@@ -52,7 +51,8 @@ def main(target, arm_internal, out):
     lines.append("\tendm")
     c14 = tm["cmd14_x10"]
     for k, v in c14.items():
-        lines.append("C14_%s\t\tequ\t%d" % (k.upper(), v))
+        if k != "note":
+            lines.append("C14_%s\t\tequ\t%d" % (k.upper(), v))
     lines.append("FIRST_POLL_X10\tequ\t%d" % (tm["first_poll"] * 10))
     # idle-loop phase lock: delay D for each r = (job cycles + idle_pre) mod period, such
     # that idle_pre + job + (r..) + D + rest = 0 mod period; D = delay_fix + 10k + 4m
