@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Generate the assembler include (target.inc) for a target from its target.json."""
 import json
+import math
 import os
 import struct
 import sys
@@ -22,6 +23,8 @@ def main(target, arm_internal, out):
         "STATUSVAR\tequ\t%s" % h("status_var"),
         "POLLVAR\t\tequ\t%s" % h("poll_var"),
         "SEND_EXIT\tequ\t%s" % h("send_exit"),
+        "VBLCNT\t\tequ\t%s" % h("vbl_counter"),
+        "IDLE_RESUME\tequ\t%s" % h("idle_resume"),
         "BOOT_EXIT\tequ\t%s" % h("boot_exit"),
         "SINTAB\t\tequ\t%s" % h("rom_sintab"),
         "AIMTAB\t\tequ\t%s" % h("rom_aimtab"),
@@ -34,6 +37,23 @@ def main(target, arm_internal, out):
                       ("T_19C4", 0x08007BFC), ("T_19C8", 0x08007C1C), ("T_1AE0", 0x08007C0C),
                       ("T_1AE4", 0x08007C24), ("T_TYPES", 0x080085A0), ("T_VANISH", 0x08000134)):
         lines.append("%s\t\tequ\t%s" % (name, t(arm)))
+    # calibrated ARM response model (docs/timing.md): extra polls E = P - 1 for a reply
+    # D cycles after the latch write, first poll at first_poll, then every poll_period
+    tm = cfg["timing"]
+    E = lambda d: max(0, math.ceil((d - tm["first_poll"]) / tm["poll_period"]))
+    for k, v in tm["arm_cycles"].items():
+        lines.append("E_CMD%s\t\tequ\t%d" % (k.upper(), E(v)))
+    c12 = tm["cmd12"]
+    tab = [E(c12["n0"] if n == 0 else c12["base"] + c12["per_request"] * n) for n in range(128)]
+    lines.append("E12TAB_DATA\tmacro")
+    for i in range(0, 128, 16):
+        lines.append("\tdc.b\t" + ",".join(str(x) for x in tab[i:i + 16]))
+    lines.append("\tendm")
+    c14 = tm["cmd14_x10"]
+    for k, v in c14.items():
+        lines.append("C14_%s\t\tequ\t%d" % (k.upper(), v))
+    lines.append("FIRST_POLL_X10\tequ\t%d" % (tm["first_poll"] * 10))
+    lines.append("POLL_PERIOD_X10\tequ\t%d" % (tm["poll_period"] * 10))
     open(out, "w").write("\n".join(lines) + "\n")
 
 

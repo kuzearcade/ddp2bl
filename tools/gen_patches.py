@@ -126,6 +126,18 @@ def main():
     # start-up check: its latch read -> jmp hle_bootcheck
     hook(int(cfg["boot_hook"], 16), _Sha1Expect("211635ae7b4996386675bc5bba01a8d1de09d0b1", 8), syms["hle_bootcheck"], "boot")
 
+    # idle loop: its short branch to the poll loop -> "bra.s <trampoline>", trampoline
+    # (unreachable error path of the idle-callback registration) -> "jmp hle_idle"
+    ih, tr, ir = int(cfg["idle_hook"], 16), int(cfg["idle_trampoline"], 16), int(cfg["idle_resume"], 16)
+    o = ih - base
+    if prog[o] != 0x60 or ih + 2 + ((prog[o + 1] ^ 0x80) - 0x80) != ir:
+        sys.exit("idle hook site does not match")
+    if prog[tr - base:tr - base + 6] != _Sha1Expect("4d0f8270510ddd7c449497c2f86eab4be891804f", 6):
+        sys.exit("idle trampoline site does not match")
+    disp = tr - (ih + 2)
+    add(ih, bytes([0x60, disp & 0xff]), "idle:%06x" % ih)
+    add(tr, jmp(syms["hle_idle"]), "idletramp:%06x" % tr)
+
     for s in latch_sites:
         add(s, jsr(syms["hle_latch_write"]) + nop + nop, "latch:%06x" % s)
     # region word: the immediate of the HLE's "move.l #0,SHWIN", filled in by the builder

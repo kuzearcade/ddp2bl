@@ -1,16 +1,15 @@
 ; ---------------------------------------------------------------------------
 ; EST request processing (ARM $2280) and spawn/control handlers ($3C90 table)
 ; Register use while processing: a4 = SHWIN, a5 = HLEV, a2 = request (12 words),
-; d7 = remaining count. Handlers may use d0-d6, a0, a1, a3, a6.
+; REQN(a5) = remaining count. Handlers may use d0-d5, d7, a0, a1, a3, a6 (d6 is reserved).
 ; ---------------------------------------------------------------------------
 
 ; request word n is at 2n(a2)
 
 est_requests:
 	lea	$1F80(a4),a2
-	move.w	SYS+S_COUNT(a5),d7
-	subq.w	#1,d7
-	bcs.s	.done
+	move.w	SYS+S_COUNT(a5),REQN(a5)
+	beq.s	.done
 .loop:	move.w	(a2),d0
 	cmpi.w	#14,d0
 	bhi.s	.next			; firmware asserts (hang); never happens
@@ -18,7 +17,8 @@ est_requests:
 	move.w	.tab(pc,d0.w),d0
 	jsr	.tab(pc,d0.w)
 .next:	lea	24(a2),a2
-	dbra	d7,.loop
+	subq.w	#1,REQN(a5)
+	bne.s	.loop
 .done:	clr.w	SYS+S_COUNT(a5)
 	rts
 .tab:	dc.w	sp_bullet-.tab, sp_kill-.tab, sp_vanish-.tab, sp_setsub-.tab
@@ -257,12 +257,12 @@ sp_vanishall:
 
 ; id 6: vanish scripted bullets of type REQ1 ($1DF0)
 sp_vanishtype:
-	move.w	2(a2),d6
+	move.w	2(a2),d7
 	lea	POOL(a5),a0
 	moveq	#NOBJ-1,d5
 .l:	cmpi.w	#2,(a0)
 	bne.s	.n
-	cmp.w	O_TYPE(a0),d6
+	cmp.w	O_TYPE(a0),d7
 	bne.s	.n
 	bsr	vanish_3a4
 .n:	lea	OBJ_SIZE(a0),a0
@@ -271,18 +271,18 @@ sp_vanishtype:
 
 ; id 7: every scripted bullet becomes falling debris, appearing ones vanish ($1E34)
 sp_todebris:
-	move.w	2(a2),d6		; type
+	move.w	2(a2),d7		; type
 	moveq	#0,d2
-	move.w	d6,d2
+	move.w	d7,d2
 	lsl.w	#2,d2
 	lea	T_19C4,a1
 	move.l	(a1,d2.w),d4		; ox:oy
 	moveq	#0,d3
-	move.w	d6,d3
+	move.w	d7,d3
 	add.w	d3,d3
 	lea	T_19C8,a1
 	move.w	(a1,d3.w),a3		; limit (kept in a3 as a word)
-	move.w	d6,d2
+	move.w	d7,d2
 	lsl.w	#5,d2
 	addi.w	#$24,d2			; animation base
 	move.w	SYS+S_CNT84(a5),d3
@@ -297,7 +297,7 @@ sp_todebris:
 	clr.w	(a0)
 	bra.s	.n
 .conv:	move.w	#5,(a0)
-	move.w	d6,O_TYPE(a0)
+	move.w	d7,O_TYPE(a0)
 	move.w	d3,O_AFRAME(a0)
 	move.w	d2,O_ABASE(a0)
 	move.w	SYS+S_CNT82(a5),d1
@@ -330,10 +330,10 @@ sp_todebris:
 	dbra	d5,.l
 	rts
 
-; debris4_init: a0 = slot, d6 = type, d4 = x:y, d2 = animation base
+; debris4_init: a0 = slot, d7 = type, d4 = x:y, d2 = animation base
 debris4_init:
 	move.w	#4,(a0)
-	move.w	d6,O_TYPE(a0)
+	move.w	d7,O_TYPE(a0)
 	move.w	SYS+S_CNT86(a5),d0
 	addq.w	#1,d0
 	move.w	d0,SYS+S_CNT86(a5)
@@ -358,9 +358,9 @@ debris4_init:
 
 ; id 8: REQ6 bouncing debris pieces ($1BB0)
 sp_multidebris:
-	move.w	2(a2),d6
+	move.w	2(a2),d7
 	move.l	4(a2),d4		; x:y
-	move.w	d6,d2
+	move.w	d7,d2
 	add.w	d2,d2
 	add.w	d2,d2
 	subi.w	#$10,d2
@@ -385,9 +385,9 @@ sp_multidebris:
 ; id 9: one bouncing debris piece ($1AE8)
 sp_debris:
 	bsr	find_free
-	move.w	2(a2),d6
+	move.w	2(a2),d7
 	move.l	4(a2),d4
-	move.w	d6,d2
+	move.w	d7,d2
 	subq.w	#4,d2
 	add.w	d2,d2
 	add.w	d2,d2
@@ -400,12 +400,12 @@ sp_debris:
 sp_falling:
 	bsr	find_free
 	move.w	#5,(a0)
-	move.w	2(a2),d6
-	move.w	d6,O_TYPE(a0)
+	move.w	2(a2),d7
+	move.w	d7,O_TYPE(a0)
 	move.w	SYS+S_CNT84(a5),d3
 	andi.w	#$f,d3
 	move.w	d3,O_AFRAME(a0)
-	move.w	d6,d2
+	move.w	d7,d2
 	lsl.w	#5,d2
 	addi.w	#$24,d2
 	move.w	d2,O_ABASE(a0)
@@ -430,13 +430,13 @@ sp_falling:
 	subi.w	#$1f,d0
 	move.w	d0,O_VY(a0)
 	clr.l	O_AX(a0)
-	move.w	d6,d0
+	move.w	d7,d0
 	add.w	d0,d0
 	add.w	d0,d0
 	lea	T_19C4,a1
 	move.l	(a1,d0.w),O_OX(a0)
 	move.w	d1,O_ACNT(a0)
-	move.w	d6,d0
+	move.w	d7,d0
 	add.w	d0,d0
 	lea	T_19C8,a1
 	move.w	(a1,d0.w),O_FLAG(a0)
@@ -468,8 +468,8 @@ sp_item6:
 sp_item7:
 	bsr	find_free
 	move.w	#7,(a0)
-	move.w	2(a2),d6
-	move.w	d6,O_TYPE(a0)
+	move.w	2(a2),d7
+	move.w	d7,O_TYPE(a0)
 	move.b	9(a2),O_ITEM(a0)
 	move.w	10(a2),O_P1E(a0)
 	move.w	SYS+S_CNT84(a5),d3
@@ -477,7 +477,7 @@ sp_item7:
 	move.w	d3,SYS+S_CNT84(a5)
 	andi.w	#$f,d3
 	move.w	d3,O_AFRAME(a0)
-	move.w	d6,d2
+	move.w	d7,d2
 	lsl.w	#5,d2
 	addi.w	#$34,d2
 	move.w	d2,O_ABASE(a0)
@@ -490,12 +490,12 @@ sp_item7:
 	move.w	d3,d0
 	bsr	copy_anim_1800
 .na:	move.l	4(a2),O_X(a0)
-	move.w	d6,d0
+	move.w	d7,d0
 	add.w	d0,d0
 	add.w	d0,d0
 	lea	T_1AE0,a1
 	move.l	(a1,d0.w),O_OX(a0)
-	move.w	d6,d0
+	move.w	d7,d0
 	add.w	d0,d0
 	lea	T_1AE4,a1
 	move.w	(a1,d0.w),O_FLAG(a0)

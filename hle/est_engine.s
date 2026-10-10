@@ -1,7 +1,7 @@
 ; ---------------------------------------------------------------------------
 ; EST engine: per-frame update (ARM $55C) and animation-only pass (ARM $1730)
 ; Registers inside the object loop:
-;   a0 = object, d6 = y scroll offset (GLOB word 7), d7 = loop counter,
+;   a0 = object, d7 = y scroll offset (GLOB word 7), d6 = reserved (cycle accounting),
 ;   a4 = SHWIN, a5 = HLEV. State routines may use d0-d5, a1-a3, a6.
 ; ---------------------------------------------------------------------------
 
@@ -33,9 +33,8 @@ SPRXY		macro
 		endm
 
 est_update:
-	move.w	GLOB+14(a5),d6
+	move.w	GLOB+14(a5),d7
 	lea	POOL(a5),a0
-	moveq	#NOBJ-1,d7
 .loop:	move.w	(a0),d0
 	beq.s	.next
 	cmpi.w	#7,d0
@@ -44,7 +43,8 @@ est_update:
 	move.w	.tab-2(pc,d0.w),d0
 	jsr	.tab(pc,d0.w)
 .next:	lea	OBJ_SIZE(a0),a0
-	dbra	d7,.loop
+	cmpa.l	#HLEV+POOL+(NOBJ-1)*OBJ_SIZE,a0
+	bls.s	.loop
 	tst.w	SYS+$12(a5)
 	beq.s	.t1
 	subq.w	#1,SYS+$12(a5)
@@ -57,7 +57,6 @@ est_update:
 
 est_animate:
 	lea	POOL(a5),a0
-	moveq	#NOBJ-1,d7
 .loop:	move.w	(a0),d0
 	cmpi.w	#4,d0
 	bcs.s	.next
@@ -70,7 +69,8 @@ est_animate:
 	bra.s	.next
 .up:	bsr	anim_up			; 4, 6
 .next:	lea	OBJ_SIZE(a0),a0
-	dbra	d7,.loop
+	cmpa.l	#HLEV+POOL+(NOBJ-1)*OBJ_SIZE,a0
+	bls.s	.loop
 	clr.w	SYS+S_BUSY(a5)
 	rts
 
@@ -189,7 +189,7 @@ st2:
 	SPLIT	d5,O_AY,d0,d1
 	add.w	O_X(a0),d4		; x
 	add.w	O_Y(a0),d5
-	add.w	d6,d5			; y
+	add.w	d7,d5			; y
 	move.w	O_TIMER(a0),d0
 	beq.s	.script
 	subq.w	#1,d0
@@ -467,7 +467,7 @@ st3:
 	SPLIT	d5,O_AY,d0,d1
 	add.w	O_X(a0),d4
 	add.w	O_Y(a0),d5
-	add.w	d6,d5
+	add.w	d7,d5
 	lea	T_VANISH,a1		; ARM $08000134 - 8*wait
 	moveq	#0,d1
 	move.w	d3,d1
@@ -505,7 +505,7 @@ st1:
 	bne.s	.w1
 	move.w	#1,O_WAIT(a0)
 	bra.s	.w2
-.w1:	add.w	d6,O_Y(a0)
+.w1:	add.w	d7,O_Y(a0)
 .w2:	move.w	O_SUB(a0),d0
 	bne.s	.sub
 	lea	T_1718,a1
@@ -558,7 +558,7 @@ st1:
 	rts
 .go:	tst.w	O_WAIT(a0)
 	bne.s	.g1
-	sub.w	d6,O_Y(a0)
+	sub.w	d7,O_Y(a0)
 .g1:	tst.w	SYS+$14(a5)
 	beq.s	.g2
 	bsr	vanish_40c
@@ -607,7 +607,7 @@ st4:
 	add.w	O_X(a0),d4
 	move.w	d4,O_X(a0)		; x
 	add.w	O_Y(a0),d5
-	add.w	d6,d5
+	add.w	d7,d5
 	move.w	d5,O_Y(a0)		; y
 	tst.w	O_TIMER(a0)
 	beq.s	.nob
@@ -697,7 +697,7 @@ st5:
 	rts
 .alive:	subi.w	#$10,O_VX(a0)
 	add.w	O_Y(a0),d5
-	add.w	d6,d5
+	add.w	d7,d5
 	move.w	d5,O_Y(a0)
 	SPRXY	d4,d5,O_OX(a0),O_OY(a0),d0
 	bra	anim_down
@@ -715,7 +715,7 @@ item_move:
 	bne.s	.s
 	move.w	GLOB+10(a5),d0
 .s:	add.w	d0,O_X(a0)
-	add.w	d6,O_Y(a0)
+	add.w	d7,O_Y(a0)
 	rts
 
 st6:

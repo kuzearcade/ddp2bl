@@ -138,6 +138,31 @@ local function vregs()
   return sh_spr:read_raw(0, sh_spr.size) .. sh_zoom:read_raw(0, sh_zoom.size) .. table.concat(t)
 end
 
+---------------------------------------------------------------------------
+-- logical frames: sampled when the game itself starts a new frame (its frame counter
+-- is written in the wait-for-vblank routine), independent of where the 68k happens to
+-- be in its idle loop at the video frame boundary. Record "LOGI": u32 video frame,
+-- u32 logical index, main RAM (canonical), sound command log since the last record.
+---------------------------------------------------------------------------
+local logical_index = 0
+local sound_log = {}
+snd_taps = {}
+for _, a in ipairs({ 0xc00002, 0xc00004, 0xc0000c }) do
+  snd_taps[#snd_taps + 1] = space:install_write_tap(a, a + 1, "ddp2h_snd", function(offset, data, mask)
+    sound_log[#sound_log + 1] = string.pack("<I4I2I2", offset, data & 0xffff, mask & 0xffff)
+  end)
+end
+if state_out and target.frame_counter then
+  fc_tap = space:install_write_tap(target.frame_counter, target.frame_counter + 3, "ddp2h_fc", function(offset, data, mask)
+    if offset ~= target.frame_counter + 2 then return end   -- once per update (low word)
+    logical_index = logical_index + 1
+    state_out:write("LOGI" .. u32(screen:frame_number()) .. u32(logical_index))
+    section(canonical_mainram())
+    section(table.concat(sound_log))
+    sound_log = {}
+  end)
+end
+
 -- optional instruction trace of the 68000 (needs -debug): DDP2H_TRACE="first,last,path"
 local trace_first, trace_last, trace_path
 do

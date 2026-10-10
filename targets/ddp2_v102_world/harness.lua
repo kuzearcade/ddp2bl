@@ -12,6 +12,7 @@ do
   T.hlev = { base = tonumber(s:match('"hlev_base"%s*:%s*"0x(%x+)"'), 16),
              size = tonumber(s:match('"hlev_size"%s*:%s*"0x(%x+)"'), 16) }
   T.stack_floor = tonumber(s:match('"stack_floor"%s*:%s*"0x(%x+)"'), 16)
+  T.frame_counter = tonumber(s:match('"frame_counter"%s*:%s*"0x(%x+)"'), 16)
 end
 
 -- RAM map (68k addresses), found by analysis of v102 World:

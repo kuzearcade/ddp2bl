@@ -37,20 +37,62 @@ def read_exact(f, n):
     return buf
 
 
-def consume(fifo_path, out_dir, dump_frames, result):
+def unrelocate(ram, win_base, win_size):
+    """Converted set: 32-bit pointers into the relocated shared window -> original $D0xxxx.
+
+    The game keeps pointers to ASIC results in its own RAM; after relocation they point
+    into the window. Raw share bytes are host order (68k word n = LE halfword at byte n),
+    so a 68k long $0081HHLL at an even offset is the byte sequence 81 00 LL HH."""
+    import re
+    lo, hi = win_base & 0xffff, (win_base + win_size - 1) & 0xffff
+    hi_byte = bytes([win_base >> 16 & 0xff, 0x00])
+    out = bytearray(ram)
+    for m in re.finditer(re.escape(hi_byte) + b"(?=..)", ram, re.S):
+        i = m.start()
+        if i & 1:
+            continue
+        v = ram[i + 2] | (ram[i + 3] << 8)
+        if lo <= v <= hi:
+            off = v - lo
+            out[i:i + 4] = bytes([0xd0, 0x00, off & 0xff, off >> 8])
+    return bytes(out)
+
+
+def consume(fifo_path, out_dir, dump_frames, result, reloc=None):
     hashes = open(os.path.join(out_dir, "hashes.txt"), "w")
+    logical = open(os.path.join(out_dir, "logical.txt"), "w")
     frames = 0
     with open(fifo_path, "rb") as f:
         while True:
             hdr = read_exact(f, 8)
             if hdr is None:
                 break
+            if hdr[:4] == b"LOGI":
+                vframe = struct.unpack("<I", hdr[4:])[0]
+                (idx,) = struct.unpack("<I", read_exact(f, 4))
+                secs = []
+                for _ in range(2):
+                    (n,) = struct.unpack("<I", read_exact(f, 4))
+                    secs.append(read_exact(f, n))
+                if reloc:
+                    secs[0] = unrelocate(secs[0], *reloc)
+                logical.write("%d %d %s %s\n" % (idx, vframe, hashlib.blake2b(secs[0], digest_size=8).hexdigest(),
+                                                hashlib.blake2b(secs[1], digest_size=8).hexdigest()))
+                if "L%d" % idx in dump_frames:
+                    os.makedirs(os.path.join(out_dir, "dumps"), exist_ok=True)
+                    with open(os.path.join(out_dir, "dumps", "L%08d.bin" % idx), "wb") as d:
+                        for s_ in secs:
+                            d.write(struct.pack("<I", len(s_)))
+                            d.write(s_)
+                continue
             assert hdr[:4] == b"FRME", hdr
             frame = struct.unpack("<I", hdr[4:])[0]
             secs = []
             for _ in SECTIONS:
                 (n,) = struct.unpack("<I", read_exact(f, 4))
                 secs.append(read_exact(f, n))
+            if reloc:
+                secs[0] = unrelocate(secs[0], *reloc)
             hashes.write("%d %s\n" % (frame, " ".join(hashlib.blake2b(s, digest_size=8).hexdigest() for s in secs)))
             if frame in dump_frames:
                 os.makedirs(os.path.join(out_dir, "dumps"), exist_ok=True)
@@ -60,6 +102,7 @@ def consume(fifo_path, out_dir, dump_frames, result):
                         d.write(s)
             frames += 1
     hashes.close()
+    logical.close()
     result["frames"] = frames
 
 
@@ -125,7 +168,10 @@ def main():
            "-seconds_to_run", str(a.frames // 50 + 60)] + a.extra.split()
 
     result = {}
-    t = threading.Thread(target=consume, args=(fifo, out, {int(x) for x in a.dump.split(",") if x}, result))
+    import json
+    tcfg = json.load(open(os.path.join(ROOT, "targets", a.target, "target.json")))
+    reloc = (int(tcfg["reloc_base"], 16), int(tcfg["reloc_size"], 16)) if a.machine.endswith("bl") else None
+    t = threading.Thread(target=consume, args=(fifo, out, {(x if x.startswith("L") else int(x)) for x in a.dump.split(",") if x}, result, reloc))
     t.start()
     with open(os.path.join(out, "mame.log"), "w") as log:
         rc = subprocess.call(cmd, env=env, stdout=log, stderr=subprocess.STDOUT)

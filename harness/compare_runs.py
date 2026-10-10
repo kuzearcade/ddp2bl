@@ -50,6 +50,19 @@ def main():
         bad_any += bad
         rr = ranges(bad)
         print("  %-8s differing frames: %-7d %s" % (s, len(bad), " ".join("%d-%d" % x for x in rr[:12]) + (" ..." if len(rr) > 12 else "")))
+    # logical frames: state when the game starts each frame, plus sound commands sent
+    lr = [l.split() for l in open(os.path.join(a.ref, "logical.txt"))] if os.path.exists(os.path.join(a.ref, "logical.txt")) else []
+    lt = [l.split() for l in open(os.path.join(a.test, "logical.txt"))] if os.path.exists(os.path.join(a.test, "logical.txt")) else []
+    if lr and lt:
+        n = min(len(lr), len(lt))
+        ram_bad = [int(lr[i][0]) for i in range(n) if lr[i][2] != lt[i][2]]
+        snd_bad = [int(lr[i][0]) for i in range(n) if lr[i][3] != lt[i][3]]
+        vf_bad = [int(lr[i][0]) for i in range(n) if lr[i][1] != lt[i][1]]
+        print("logical frames compared: %d (ref %d, test %d)" % (n, len(lr), len(lt)))
+        for name, b in (("game RAM", ram_bad), ("sound cmds", snd_bad), ("video frame", vf_bad)):
+            rr = ranges(b)
+            print("  %-11s differing: %-7d %s" % (name, len(b), " ".join("%d-%d" % x for x in rr[:12]) + (" ..." if len(rr) > 12 else "")))
+        bad_any += ram_bad + snd_bad + vf_bad
     return 1 if bad_any else 0
 
 

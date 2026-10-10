@@ -29,7 +29,10 @@ RNG_S		equ	$22A4		; 55 longs
 RNG_K		equ	$2380		; long
 RNG_J		equ	$2384		; long
 LATCH		equ	$2388		; byte: value the 68k reads at its old latch address
-HLEV_SIZE	equ	$238C
+PENDING		equ	$238A		; word: job accepted by cmd 12/13, not yet run
+E14		equ	$238C		; word: extra polls cmd 14 takes (from the packer)
+REQN		equ	$238E		; word: requests left (job)
+HLEV_SIZE	equ	$2390
 
 ; --- SYS fields (ARM offsets, halfwords) -----------------------------------
 S_COUNT		equ	$00		; request count / header [0..$17] round-trips via $1F00
@@ -82,85 +85,200 @@ O_OY		equ	$42
 ; ---------------------------------------------------------------------------
 ; hle_send
 ; Entered by "jmp" from the game's send(cmd) in place of
-;     its command-word store and latch post      (at the send hook)
-; with d2.l = command. The original then polls the latch once (the ARM always
-; answers before the first poll) and reaches the epilogue SEND_EXIT 266 cycles
-; after the hook. We perform the command, leave every RAM/register effect the
-; original leaves on that path, and arrive at SEND_EXIT after exactly the same
-; number of cycles for every command whose work fits (all but 11/12/13/14).
-;   effects: seq var += 1 (& $7F), echo var = new seq, status var = 0,
-;            poll counter = $270F (= $2710 - 1 poll), d0.b = new seq (upper d0
-;            unchanged), X = 0. d2 is free (restored by the epilogue).
-;   timing : cycles per instruction in the comments (MC68000 manual tables, as
-;            implemented by MAME's cycle-exact 68000 core).
+;     its command-word store and latch post      (the send hook)
+; with d2.l = command. In the reference (protected set, per-cycle interleave)
+; the ARM replies D cycles after the latch write; the 68k polls first after
+; FIRST_POLL cycles and then every 94, so it reaches SEND_EXIT after
+;     266 + E*94 cycles,   E = extra polls = ceil((D - 146) / 94)
+; (docs/timing.md; D per command from the calibrated model in target.json).
+; We do the command and leave exactly the RAM/register effects of that path:
+; seq var += 1 (& $7F), echo var = new seq, status var = 0, poll counter =
+; $2710 - (E+1), d0.b = new seq (upper d0 unchanged), X = 0; d2 is free.
+; Cheap commands are padded to exactly that many cycles. The variable waits
+; (12/13/14) use a 94-cycle loop which, like the original poll loop, ends early
+; when the vblank interrupt (IRQ6) fires during the wait.
+; Cycle counts per instruction are in the comments (MC68000 manual tables).
 ; ---------------------------------------------------------------------------
 hle_send:				; 12 (the jmp that got us here)
+	move.l	d1,-(sp)		; 12
 	move.b	SEQVAR,d0		; 16
 	addq.b	#1,d0			;  4  (X = 0: seq <= $80)
 	andi.b	#$7f,d0			;  8
 	move.b	d0,SEQVAR		; 16
 	clr.w	STATUSVAR		; 20
-	move.w	#$270f,POLLVAR+2	; 20  (high word is always 0)
 	move.b	d0,ECHOVAR		; 16
 	move.b	d0,HLEV+LATCH		; 16  (read only by the game's error helper)
+	move.l	VBLCNT,d1		; 20  vblank counter at the start of the wait
 	add.w	d2,d2			;  4
 	move.w	.tab(pc,d2.w),d2	; 14
-	jmp	.tab(pc,d2.w)		; 14  = 160; 266 - 160 - 12 (exit jmp) = 94 left
-.tab:	dc.w	snd_none-.tab, snd_none-.tab, snd_none-.tab, snd_03-.tab
+	jmp	.tab(pc,d2.w)		; 14  = 172
+.tab:	dc.w	snd_none-.tab, snd_01-.tab, snd_02-.tab, snd_03-.tab
 	dc.w	snd_04-.tab, snd_none-.tab, snd_none-.tab, snd_none-.tab
 	dc.w	snd_none-.tab, snd_09-.tab, snd_0a-.tab, snd_none-.tab
 	dc.w	snd_none-.tab, snd_none-.tab, snd_none-.tab, snd_none-.tab
 	dc.w	snd_none-.tab, snd_11-.tab, snd_12-.tab, snd_13-.tab
-	dc.w	snd_14-.tab, snd_none-.tab, snd_16-.tab, snd_16-.tab
+	dc.w	snd_14-.tab, snd_none-.tab, snd_16-.tab, snd_17-.tab
 
-; PAD n: burn exactly n cycles (n even, n >= 4); clobbers N,Z,V,C (not X)
+; PAD n: burn exactly n cycles (n = 0, or even and >= 4); clobbers N,Z,V,C (not X)
 PAD		macro
+		if (\1)>0
 		if ((\1)%4)=2
 		rept	((\1)-6)/4
 		nop
 		endr
-		cmp.l	d2,d2		; 6
+		cmp.l	d2,d2			; 6
 		else
 		rept	(\1)/4
 		nop
 		endr
 		endif
+		endif
 		endm
 
-snd_none:				; 01, 02, unused: no 68k-visible effect
-	PAD	94
-	jmp	SEND_EXIT
+; DELAY n: burn exactly n cycles using d2 for long delays (n even, n = 0 or >= 4)
+DELAY		macro
+		if (\1)<64
+		PAD	\1
+		else
+		move.w	#(((\1)-22-4)/10),d2	; 8
+.d\@:		dbra	d2,.d\@			; 10 per pass, 14 at the end
+		PAD	(\1)-22-10*(((\1)-22-4)/10)
+		endif
+		endm
+
+; FIXED cmd, E, work: pad a cheap command to 266 + E*94 cycles in total.
+; The caller has done "work" cycles of command work; we add the poll residue
+; (20) and the epilogue (24).
+FIXED		macro
+		move.w	#($2710-1-(\1)),POLLVAR+2	; 20
+		DELAY	(266+(\1)*94-172-24-20-(\2))
+		move.l	(sp)+,d1		; 12
+		jmp	SEND_EXIT		; 12
+		endm
+
+snd_none:				; unused commands: "UNUSED HRQCMD", no 68k-visible effect
+	FIXED	1,0
+snd_01:					; system init: no 68k-visible effect
+	FIXED	E_CMD01,0
+snd_02:	FIXED	E_CMD02,0
 snd_03:	move.w	#1,SHWIN+$20		; 20  reset flag never left set
-	PAD	74
-	jmp	SEND_EXIT
+	FIXED	E_CMD03,20
 snd_04:	clr.w	SHWIN+$20		; 20  message queue always empty
-	PAD	74
-	jmp	SEND_EXIT
+	FIXED	E_CMD04,20
 snd_09:	move.l	SHWIN+$20,HLEV+GLOB	; 36
 	move.l	SHWIN+$24,HLEV+GLOB+4	; 36
-	PAD	22
-	jmp	SEND_EXIT
+	FIXED	E_CMD09,72
 snd_0a:	move.l	SHWIN+$20,HLEV+GLOB+8	; 36
 	move.l	SHWIN+$24,HLEV+GLOB+12	; 36
-	PAD	22
-	jmp	SEND_EXIT
+	FIXED	E_CMD0A,72
 snd_16:	clr.w	SHWIN+$22		; 20  RAM test passed
-	PAD	74
-	jmp	SEND_EXIT
+	FIXED	E_CMD16,20
+snd_17:	clr.w	SHWIN+$22		; 20
+	FIXED	E_CMD17,20
 
-; heavy commands: full register save, not padded (they run in frames with idle time)
-HEAVY		macro
-		movem.l	d0-d7/a0-a6,-(sp)
-		lea	HLEV,a5
-		lea	SHWIN,a4
-		bsr	\1
-		movem.l	(sp)+,d0-d7/a0-a6
+; variable wait: d2.w = E (>= 2), "work" = cycles spent since the dispatch.
+; total = 172 + work + 44 + (E-1)*94 + 4 + pad + 24 = 266 + E*94  ->  pad = 116 - work
+WAITE		macro
+		move.w	#$270f,POLLVAR+2	; 20
+		sub.w	d2,POLLVAR+2		; 20  residue = $2710 - (E+1)
+		subq.w	#2,d2			;  4  E-1 passes
+.w\@:		cmp.l	VBLCNT,d1		; 22
+		bne.s	.irq\@			;  8
+		PAD	54
+		dbra	d2,.w\@			; 10 / 14
+		PAD	(116-(\1))
+		move.l	(sp)+,d1		; 12
+		jmp	SEND_EXIT		; 12
+.irq\@:		; vblank fired during the wait: like the original, stop at the next poll
+		addq.w	#1,d2
+		add.w	d2,POLLVAR+2		; fewer polls were made
+		move.l	(sp)+,d1
 		jmp	SEND_EXIT
 		endm
-snd_11:	HEAVY	cmd_11
-snd_12:	HEAVY	cmd_12
-snd_13:	HEAVY	cmd_13
-snd_14:	HEAVY	cmd_14
+
+; cmd 12 / 13: the ARM accepts the job and runs it in the background, while the 68k
+; idles; we run it in the game's idle loop (hle_idle) or, failing that, at cmd 14.
+snd_13:	move.w	#$13,HLEV+PENDING	; 20
+	bra.s	snd_1213		; 10
+snd_12:	move.w	#$12,HLEV+PENDING	; 20
+	PAD	10			; 10  (same path length as snd_13)
+snd_1213:
+	move.w	SHWIN+$1F00,d2		; 16  number of requests
+	andi.w	#$7f,d2			;  8
+	move.l	a0,-(sp)		; 12
+	lea	E12TAB,a0		; 12
+	move.b	(a0,d2.w),d2		; 14
+	movea.l	(sp)+,a0		; 12
+	andi.w	#$ff,d2			;  8  = 112 since dispatch
+	WAITE	112
+E12TAB:	E12TAB_DATA			; extra polls for cmd 12 by request count
+	even
+
+; cmd 14, no idle time since cmd 12 (slowdown): do the work now (not cycle matched)
+snd_14_late:
+	movem.l	d0-d7/a0-a6,-(sp)
+	bsr	hle_run_job
+	movem.l	(sp)+,d0-d7/a0-a6
+	move.w	#1,SHWIN+$20
+	move.w	HLEV+E14,d2
+	move.w	#$270f,POLLVAR+2
+	sub.w	d2,POLLVAR+2
+	move.l	(sp)+,d1
+	jmp	SEND_EXIT
+
+; cmd 14: results are already in the shared window (packed in the idle loop)
+snd_14:	tst.w	HLEV+PENDING		; 16
+	bne.s	snd_14_late		;  8
+	move.w	#1,SHWIN+$20		; 20  done
+	move.w	HLEV+E14,d2		; 16  = 60
+	WAITE	60
+
+; cmd 11: EST reset, once at start-up (not cycle matched)
+snd_11:	movem.l	d0-d7/a0-a6,-(sp)
+	lea	HLEV,a5
+	lea	SHWIN,a4
+	bsr	cmd_11
+	movem.l	(sp)+,d0-d7/a0-a6
+	move.w	#($2710-1-E_CMD11),POLLVAR+2
+	move.l	(sp)+,d1
+	jmp	SEND_EXIT
+
+; ---------------------------------------------------------------------------
+; hle_idle
+; Reached once per frame from the game's "wait for vblank" routine, at the point
+; where its message queue is drained and it starts polling (hook: "bra.s" ->
+; trampoline "jmp"). That polling loop has a fixed period of 330 cycles, so
+; delaying its start by exactly 330 changes nothing: frames without a job cost
+; exactly one period. With a job pending we run it here, where the ARM ran it.
+; ---------------------------------------------------------------------------
+hle_idle:				; 10 (bra.s) + 12 (jmp)
+	tst.w	HLEV+PENDING		; 16
+	beq.s	.none			; 10 taken
+	movem.l	d0-d7/a0-a6,-(sp)
+	bsr	hle_run_job
+	movem.l	(sp)+,d0-d7/a0-a6
+	jmp	IDLE_RESUME
+.none:	PAD	(330-12-16-10-12)	; one full polling-loop period in total
+	jmp	IDLE_RESUME		; 12
+
+; pack the results only (test benches that resynchronise state per command)
+hle_pack:
+	lea	HLEV,a5
+	lea	SHWIN,a4
+	bra	est_results
+
+; run the pending job (cmd 12: update, cmd 13: animate) and pack the results
+hle_run_job:
+	lea	HLEV,a5
+	lea	SHWIN,a4
+	move.w	PENDING(a5),d0
+	clr.w	PENDING(a5)
+	cmpi.w	#$13,d0
+	beq.s	.anim
+	bsr	cmd_12
+	bra	est_results
+.anim:	bsr	cmd_13
+	bra	est_results
 
 ; ---------------------------------------------------------------------------
 ; hle_bootcheck

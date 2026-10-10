@@ -53,7 +53,7 @@
   "reloc_base": "0x818000",
   "reloc_size": "0x3400",
   "hlev_base": "0x81B400",
-  "hlev_size": "0x238C",
+  "hlev_size": "0x2390",
   "hlev_latch_offset": "0x2388",
   "seq_var": "0x808C9C",
   "hle_base": "0x262000",
@@ -72,5 +72,40 @@
   "boot_exit": "0x145A6A",
   "status_var": "0x80ECAA",
   "poll_var": "0x80ECAE",
-  "echo_var": "0x808C9D"
+  "echo_var": "0x808C9D",
+  "vbl_counter": "0x80ED38",
+  "idle_hook": "0x145C86",
+  "idle_trampoline": "0x145C16",
+  "idle_resume": "0x145CBE",
+  "timing": {
+    "send_base_cycles": 266,
+    "poll_period": 94,
+    "first_poll": 146,
+    "idle_period": 330,
+    "arm_cycles": {
+      "01": 174,
+      "02": 158,
+      "03": 168,
+      "04": 192,
+      "09": 159,
+      "0a": 159,
+      "11": 1270,
+      "16": 1270,
+      "17": 1270
+    },
+    "cmd12": {
+      "n0": 360,
+      "base": 356,
+      "per_request": 54
+    },
+    "cmd14_x10": {
+      "const": 40476,
+      "state123": 300,
+      "state4": 540,
+      "state5": 340,
+      "state67": 490,
+      "removed": 112
+    }
+  },
+  "frame_counter": "0x808D8E"
 }

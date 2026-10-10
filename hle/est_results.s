@@ -14,16 +14,17 @@ est_results:
 	lea	$0EC0(a4),a2
 	lea	$0880(a4),a3
 	move.w	#$07E0,d5		; state 4 block offset in SHWIN
-	move.w	#$3000,d6		; state 4 list offset in SHWIN
-	moveq	#NOBJ-1,d7
+	move.w	#$3000,d7		; state 4 list offset in SHWIN
+	move.l	#C14_CONST,d3		; ARM time of this packer x10 (for the cmd 14 wait)
 .obj:	move.w	(a0),d0
-	beq.s	.sum
+	beq	.sum
 	cmpi.w	#4,d0
 	bcs.s	.s123
 	beq.s	.s4
 	cmpi.w	#5,d0
 	beq.s	.s5
 	; states 6/7 (and anything above): slot chosen by item id
+	addi.l	#C14_STATE67,d3
 	moveq	#0,d1
 	move.b	O_ITEM(a0),d1
 	mulu.w	#10,d1
@@ -33,28 +34,32 @@ est_results:
 	move.l	O_SPRX+4(a0),(a6)+
 	move.w	O_SPRX+8(a0),(a6)
 	bra.s	.sum
-.s123:	move.l	O_SPRX(a0),(a2)+
+.s123:	addi.l	#C14_STATE123,d3
+	move.l	O_SPRX(a0),(a2)+
 	move.l	O_SPRX+4(a0),(a2)+
 	move.w	O_SPRX+8(a0),(a2)+
 	bra.s	.sum
-.s5:	move.l	O_SPRX(a0),(a3)+
+.s5:	addi.l	#C14_STATE5,d3
+	move.l	O_SPRX(a0),(a3)+
 	move.l	O_SPRX+4(a0),(a3)+
 	move.w	O_SPRX+8(a0),(a3)+
 	bra.s	.sum
-.s4:	lea	(a4,d5.w),a6
+.s4:	addi.l	#C14_STATE4,d3
+	lea	(a4,d5.w),a6
 	move.l	O_SPRX(a0),(a6)+
 	move.l	O_SPRX+4(a0),(a6)+
 	move.w	O_SPRX+8(a0),(a6)
 	addi.w	#10,d5
-	move.w	O_TYPE(a0),(a4,d6.w)
-	move.l	O_X(a0),2(a4,d6.w)
-	addq.w	#6,d6
+	move.w	O_TYPE(a0),(a4,d7.w)
+	move.l	O_X(a0),2(a4,d7.w)
+	addq.w	#6,d7
 .sum:	move.l	(a0),(a1)+
 	move.l	4(a0),(a1)+
 	move.w	8(a0),(a1)
 	addq.l	#8,a1
 	lea	OBJ_SIZE(a0),a0
-	dbra	d7,.obj
+	cmpa.l	#HLEV+POOL+(NOBJ-1)*OBJ_SIZE,a0
+	bls	.obj
 
 	lea	SYS(a5),a0		; header back to the 68k
 	lea	$1F00(a4),a1
@@ -64,6 +69,13 @@ est_results:
 	move.l	(a0)+,(a1)+
 	move.l	(a0)+,(a1)+
 	move.l	(a0)+,(a1)+
+	move.w	SYS+S_REMOVED_N(a5),d0
+	mulu.w	#C14_REMOVED,d0
+	add.l	d0,d3
+	; extra polls E = ceil((D - first poll) / poll period), all x10
+	subi.l	#FIRST_POLL_X10-(POLL_PERIOD_X10-1),d3
+	divu.w	#POLL_PERIOD_X10,d3
+	move.w	d3,E14(a5)
 	move.w	SYS+S_REMOVED_N(a5),d0
 	beq.s	.done
 	move.w	d0,$1F18(a4)

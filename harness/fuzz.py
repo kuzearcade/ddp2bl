@@ -128,8 +128,12 @@ def main():
         cpu.load(shw, bytes(win))
         cpu.load(hlev, H.arm_to_hlev(st_w))
         cpu.load(H.SYMS["SEQVAR"], bytes([seq]))
+        if cmd == 0x14:
+            cpu.call(H.SYMS["hle_pack"], max_cycles=50_000_000)      # done in the idle loop in the game
         cpu.set_reg(2, cmd)
         cpu.call(H.SYMS["hle_send"], max_cycles=20_000_000)
+        if cmd in (0x12, 0x13):
+            cpu.call(H.SYMS["hle_run_job"], max_cycles=50_000_000)   # what hle_idle does
         c_sh = H.hswap(cpu.dump(shw, size))
         sys_, pool, glob, rngs = H.hlev_to_armview(cpu.dump(hlev, H.HLEV_SIZE))
         probs = []
@@ -137,6 +141,11 @@ def main():
             probs.append("model differs from firmware")
         rs = bytearray(r_sh[:size])
         rs[0x10:0x12] = b"\0\0"
+        if cmd in (0x12, 0x13):   # results are packed early (idle); checked after cmd 14
+            c_sh = bytearray(c_sh)
+            for lo, hi in ((0x05E0, 0x1F40), (0x3000, 0x3300)):
+                c_sh[lo:hi] = rs[lo:hi]
+            c_sh = bytes(c_sh)
         if c_sh != bytes(rs):
             d = next(i for i in range(size) if c_sh[i] != rs[i])
             probs.append("68k shared +%04x %02x vs %02x" % (d, c_sh[d], rs[d]))
