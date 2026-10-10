@@ -71,6 +71,7 @@ def main():
     ap.add_argument("--inputs", help="replay: input log to play back")
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--players", type=int, default=1)
+    ap.add_argument("--style", default="random", choices=("random", "aim"))
     ap.add_argument("--cheats", default="")
     ap.add_argument("--frames", type=int, required=True)
     ap.add_argument("--out", required=True)
@@ -97,6 +98,7 @@ def main():
         "DDP2H_INPUTS": os.path.abspath(a.inputs) if a.mode == "replay" else os.path.join(out, "inputs.txt"),
         "DDP2H_SEED": str(a.seed),
         "DDP2H_BOT_PLAYERS": str(a.players),
+        "DDP2H_BOT_STYLE": a.style,
         "DDP2H_CHEATS": a.cheats,
         "DDP2H_STATE": fifo,
         "DDP2H_FRAMES": str(a.frames),

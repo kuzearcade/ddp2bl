@@ -48,7 +48,8 @@ function T.make_bot(space, rand)
   local pl = {}
   for p = 1, players do pl[p] = { dir = 0, dir_left = 0, fire_hold = true, fire_left = 0 } end
   local dirs = { 0, 0x02, 0x04, 0x08, 0x10, 0x0a, 0x12, 0x0c, 0x14 } -- none, U, D, L, R, diagonals
-  local quiet = tonumber(os.getenv("DDP2H_BOT_QUIET") or "600") -- no inputs while the BIOS boots
+  local quiet = tonumber(os.getenv("DDP2H_BOT_QUIET") or "600")
+  local style = os.getenv("DDP2H_BOT_STYLE") or "random" -- no inputs while the BIOS boots
   return function(frame)
     local p12, svc = 0xffff, 0xffff
     if frame < quiet then return p12, 0xffff, svc end
@@ -58,9 +59,21 @@ function T.make_bot(space, rand)
       local s, sh = pl[p], (p - 1) * 8
       local bits = 0
       if frame % 120 >= 60 + p * 4 and frame % 120 < 63 + p * 4 then bits = bits | 0x01 end -- start / continue
-      if s.dir_left <= 0 then s.dir = dirs[rand() % #dirs + 1]; s.dir_left = 5 + rand() % 40 end
-      s.dir_left = s.dir_left - 1
-      bits = bits | s.dir
+      if style == "aim" and space:read_u8(P1_LIVES + (p - 1) * P2_OFS_LIVES) > 0 then
+        -- steer to the screen's centre column, a fixed distance from the bottom, with jitter
+        local obj = 0x812566 + (p - 1) * P2_OFS_OBJ
+        local u = space:read_i16(obj)        -- up/down axis   (32..191, centre ~112)
+        local v = space:read_i16(obj + 2)    -- left/right axis
+        local tu = 112 + ((frame // 97) % 5 - 2) * 12
+        local tv = 85 + ((frame // 131) % 3) * 15
+        if u < tu - 4 then bits = bits | 0x02 elseif u > tu + 4 then bits = bits | 0x04 end
+        if v < tv - 4 then bits = bits | 0x10 elseif v > tv + 4 then bits = bits | 0x08 end
+        s.fire_hold = true
+      else
+        if s.dir_left <= 0 then s.dir = dirs[rand() % #dirs + 1]; s.dir_left = 5 + rand() % 40 end
+        s.dir_left = s.dir_left - 1
+        bits = bits | s.dir
+      end
       if s.fire_left <= 0 then s.fire_hold = (rand() % 4) ~= 0; s.fire_left = 10 + rand() % 120 end
       s.fire_left = s.fire_left - 1
       if s.fire_hold or (frame % 6) < 3 then bits = bits | 0x20 end         -- hold = laser, tap = shot
