@@ -119,6 +119,9 @@ def main():
     put(H("hle_base"), hle, "68000 code")
     put(H("rom_sintab"), hswap(internal[0x2890:0x2C90]), "sine table")
     put(H("rom_aimtab"), internal[0x2C90:0x4000], "aim table")
+    sys.path.insert(0, HERE)
+    from mulcost import mulcost_table
+    put(H("rom_mulcost"), mulcost_table(internal), "multiply cost table")
     extrom = H("rom_extrom")
     put(extrom, hswap(ext[0:H("extrom_size")]), "external ROM data")
     tab = struct.unpack_from("<I", ext, 0x80)[0] - 0x08000000

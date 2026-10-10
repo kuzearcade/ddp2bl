@@ -12,7 +12,7 @@ est_results:
 	lea	POOL(a5),a0
 	lea	$1500(a4),a1
 	lea	$0EC0(a4),a2
-	lea	$0880(a4),a3
+	move.w	#$0880,d4		; state 5 block offset in SHWIN
 	move.w	#$07E0,d5		; state 4 block offset in SHWIN
 	move.w	#$3000,d7		; state 4 list offset in SHWIN
 	move.l	#C14_CONST,d3		; ARM time of this packer x10 (for the cmd 14 wait)
@@ -40,9 +40,11 @@ est_results:
 	move.w	O_SPRX+8(a0),(a2)+
 	bra.s	.sum
 .s5:	addi.l	#C14_STATE5,d3
-	move.l	O_SPRX(a0),(a3)+
-	move.l	O_SPRX+4(a0),(a3)+
-	move.w	O_SPRX+8(a0),(a3)+
+	lea	(a4,d4.w),a6
+	move.l	O_SPRX(a0),(a6)+
+	move.l	O_SPRX+4(a0),(a6)+
+	move.w	O_SPRX+8(a0),(a6)
+	addi.w	#10,d4
 	bra.s	.sum
 .s4:	addi.l	#C14_STATE4,d3
 	lea	(a4,d5.w),a6
@@ -72,10 +74,16 @@ est_results:
 	move.w	SYS+S_REMOVED_N(a5),d0
 	mulu.w	#C14_REMOVED,d0
 	add.l	d0,d3
-	; extra polls E = ceil((D - first poll) / poll period), all x10
+	; extra polls E = ceil((D - first poll) / poll period), all x10 (no DIVU: its timing
+	; is data dependent; this loop's cost is accounted block by block)
 	subi.l	#FIRST_POLL_X10-(POLL_PERIOD_X10-1),d3
-	divu.w	#POLL_PERIOD_X10,d3
-	move.w	d3,E14(a5)
+	moveq	#0,d1
+.div:	cmpi.l	#POLL_PERIOD_X10,d3
+	bcs.s	.dived
+	subi.l	#POLL_PERIOD_X10,d3
+	addq.w	#1,d1
+	bra.s	.div
+.dived:	move.w	d1,E14(a5)
 	move.w	SYS+S_REMOVED_N(a5),d0
 	beq.s	.done
 	move.w	d0,$1F18(a4)

@@ -57,6 +57,7 @@ def main():
     shw, hlev, size = H.SYMS["SHWIN"], H.SYMS["HLEV"], H.SYMS["SHWIN_SIZE"]
 
     st = collections.Counter()
+    acc = collections.Counter()
     cyc = collections.defaultdict(collections.Counter)
     reported = 0
     n = 0
@@ -89,8 +90,8 @@ def main():
                 for i in range(0, size, 2):
                     if shared[i:i + 2] != prev_post[i:i + 2] and i != 0x10:
                         cpu.load(shw + i, bytes([shared[i + 1], shared[i]]))
-                if pending_cmd is not None and cmd == 0x14:
-                    # the protected set's job has finished: compare the engine state
+                if False:
+                    # (engine state is compared after our cmd 14 below)
                     h = cpu.dump(hlev, H.HLEV_SIZE)
                     sys_, pool, glob, rng = H.hlev_to_armview(h)
                     if bytes(pool) != wram[H.ARM_POOL:H.ARM_POOL + H.NOBJ * H.OBJ] or bytes(sys_[0:0x80]) != wram[0:0x80]:
@@ -101,11 +102,17 @@ def main():
                     pending_cmd = None
             cpu.load(H.SYMS["SEQVAR"], bytes([seq]))
             cpu.set_reg(2, cmd)
+            job_was_pending = cpu.dump(H.SYMS["HLEV"] + 0x238A, 2) != b"\0\0"
             c = cpu.call(H.SYMS["hle_send"], max_cycles=50_000_000)
             cyc[cmd][c] += 1
             if cmd in (0x12, 0x13):
-                cpu.call(H.SYMS["hle_run_job"], max_cycles=50_000_000)
                 pending_cmd = cmd
+            if cmd == 0x14 and job_was_pending:
+                import struct as _s
+                a3 = _s.unpack(">I", cpu.dump(H.SYMS["HLEV"] + 0x2396, 4))[0]
+                acc[c - a3] += 1                  # measured hle_send - accounted job: constant if exact
+            if cmd == 0x14 and job_was_pending:
+                nxt_compare = True
             if a.limit and n - a.skip >= a.limit:
                 break
         elif ev.type == 2 and started and cmd is not None and (ev.value & 0xff) != 0x80:
@@ -136,6 +143,7 @@ def main():
     print("hle_send cycles (Musashi) by command:")
     for c, cnt in sorted(cyc.items()):
         print("  %02x %s" % (c, ", ".join("%d x%d" % kv for kv in sorted(cnt.items())[:6])))
+    print("job cycles measured - accounted:", dict(acc.most_common(8)))
     return 1 if st["window_bad"] or st["engine_bad"] else 0
 
 

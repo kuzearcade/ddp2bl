@@ -2,7 +2,7 @@
 ; EST engine: per-frame update (ARM $55C) and animation-only pass (ARM $1730)
 ; Registers inside the object loop:
 ;   a0 = object, d7 = y scroll offset (GLOB word 7), d6 = reserved (cycle accounting),
-;   a4 = SHWIN, a5 = HLEV. State routines may use d0-d5, a1-a3, a6.
+;   a4 = SHWIN, a5 = HLEV, a3 = cycle accumulator. State routines may use d0-d6, a1, a2, a6.
 ; ---------------------------------------------------------------------------
 
 ; SPLIT v, field, t1, t2 : v.w = accumulator value (s16)

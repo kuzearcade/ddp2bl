@@ -32,7 +32,11 @@ LATCH		equ	$2388		; byte: value the 68k reads at its old latch address
 PENDING		equ	$238A		; word: job accepted by cmd 12/13, not yet run
 E14		equ	$238C		; word: extra polls cmd 14 takes (from the packer)
 REQN		equ	$238E		; word: requests left (job)
-HLEV_SIZE	equ	$2390
+TMP		equ	$2390		; word: job scratch
+PROBE		equ	$2392		; 16 bytes: verification probe writes (MAME DDP2BL_PROBE)
+DEBT		equ	$23A2		; long: cycles spent beyond the original (repaid mod 330 at idle)
+BOOTED		equ	$23A6		; word: first cmd 01 (ARM resynchronisation) seen
+HLEV_SIZE	equ	$23A8
 
 ; --- SYS fields (ARM offsets, halfwords) -----------------------------------
 S_COUNT		equ	$00		; request count / header [0..$17] round-trips via $1F00
@@ -158,8 +162,12 @@ FIXED		macro
 
 snd_none:				; unused commands: "UNUSED HRQCMD", no 68k-visible effect
 	FIXED	1,0
-snd_01:					; system init: no 68k-visible effect
-	FIXED	E_CMD01,0
+snd_01:					; system init: no 68k-visible effect. The first one after
+	tst.w	HLEV+BOOTED		; 16	power-on is the ARM's resynchronisation, a longer path.
+	bne.s	.again			; 10 / 8
+	move.w	#1,HLEV+BOOTED		; 20
+	FIXED	E_CMD01BOOT,(16+8+20)
+.again:	FIXED	E_CMD01,(16+10)
 snd_02:	FIXED	E_CMD02,0
 snd_03:	move.w	#1,SHWIN+$20		; 20  reset flag never left set
 	FIXED	E_CMD03,20
@@ -198,7 +206,7 @@ WAITE		macro
 
 ; cmd 12 / 13: the ARM accepts the job and runs it in the background, while the 68k
 ; idles; we run it in the game's idle loop (hle_idle) or, failing that, at cmd 14.
-snd_13:	move.w	#$13,HLEV+PENDING	; 20
+snd_13:	move.w	#$13,HLEV+PENDING	; 20  (a job left pending is run by cmd 14 first)
 	bra.s	snd_1213		; 10
 snd_12:	move.w	#$12,HLEV+PENDING	; 20
 	PAD	10			; 10  (same path length as snd_13)
@@ -214,34 +222,53 @@ snd_1213:
 E12TAB:	E12TAB_DATA			; extra polls for cmd 12 by request count
 	even
 
-; cmd 14, no idle time since cmd 12 (slowdown): do the work now (not cycle matched)
-snd_14_late:
-	movem.l	d0-d7/a0-a6,-(sp)
-	bsr	hle_run_job
-	movem.l	(sp)+,d0-d7/a0-a6
-	move.w	#1,SHWIN+$20
-	move.w	HLEV+E14,d2
-	move.w	#$270f,POLLVAR+2
-	sub.w	d2,POLLVAR+2
-	move.l	(sp)+,d1
-	jmp	SEND_EXIT
+; cmd 14 with the job pending: the ARM ran it concurrently with the 68k's game code
+; between cmd 12 and cmd 14; on the 68000 it runs here. Its exact cost (a3, from the
+; cycle accounting in job.s) minus what the original spent in this send() (266 + E*94)
+; is added to DEBT, which hle_idle repays modulo the 330-cycle polling period so that
+; the frame's vblank lands in the polling loop exactly as in the original.
+;   fixed cycles here: 172 (prologue) + 16 + 10 + 174 + 376 = 748, so
+;   debt = a3 + 748 - 266 - 94*E = a3 + 482 - 94*E
+snd_14_job:				; after prologue (172) + tst (16) + bne taken (10)
+	movem.l	d0-d7/a0-a6,-(sp)	; 128
+	suba.l	a3,a3			;   8
+	move.l	a3,HLEV+PROBE		;  20  probe 0
+	bsr	hle_run_job		;  18  (+ a3)
+	move.l	a3,HLEV+PROBE+4		;  20  probe 1
+	move.l	a3,d0			;   4
+	move.w	HLEV+E14,d1		;  16
+	mulu.w	#94,d1			;  52
+	sub.l	d1,d0			;   8
+	addi.l	#482,d0			;  16
+	add.l	d0,HLEV+DEBT		;  28
+	move.w	#1,SHWIN+$20		;  20  done
+	move.w	HLEV+E14,d2		;  16
+	move.w	#$270f,POLLVAR+2	;  20
+	sub.w	d2,POLLVAR+2		;  20  residue = $2710 - (E+1)
+	movem.l	(sp)+,d0-d7/a0-a6	; 132
+	move.l	(sp)+,d1		;  12
+	jmp	SEND_EXIT		;  12
 
-; cmd 14: results are already in the shared window (packed in the idle loop)
+; cmd 14: results are ready (no job pending): exact original timing
 snd_14:	tst.w	HLEV+PENDING		; 16
-	bne.s	snd_14_late		;  8
+	bne.s	snd_14_job		;  8 / 10
 	move.w	#1,SHWIN+$20		; 20  done
 	move.w	HLEV+E14,d2		; 16  = 60
 	WAITE	60
 
-; cmd 11: EST reset, once at start-up (not cycle matched)
-snd_11:	movem.l	d0-d7/a0-a6,-(sp)
-	lea	HLEV,a5
-	lea	SHWIN,a4
-	bsr	cmd_11
-	movem.l	(sp)+,d0-d7/a0-a6
-	move.w	#($2710-1-E_CMD11),POLLVAR+2
-	move.l	(sp)+,d1
-	jmp	SEND_EXIT
+; cmd 11: EST reset, once at start-up: fixed 574 + a3 vs original 266 + 12*94 = 1394
+snd_11:	movem.l	d0-d7/a0-a6,-(sp)	; 128
+	lea	HLEV,a5			;  12
+	lea	SHWIN,a4		;  12
+	suba.l	a3,a3			;   8
+	bsr	cmd_11			;  18  (+ a3)
+	move.l	a3,d0			;   4
+	subi.l	#820,d0			;  16
+	add.l	d0,HLEV+DEBT		;  28
+	movem.l	(sp)+,d0-d7/a0-a6	; 132
+	move.w	#($2710-1-E_CMD11),POLLVAR+2	; 20
+	move.l	(sp)+,d1		;  12
+	jmp	SEND_EXIT		;  12
 
 ; ---------------------------------------------------------------------------
 ; hle_idle
@@ -251,15 +278,46 @@ snd_11:	movem.l	d0-d7/a0-a6,-(sp)
 ; delaying its start by exactly 330 changes nothing: frames without a job cost
 ; exactly one period. With a job pending we run it here, where the ARM ran it.
 ; ---------------------------------------------------------------------------
-hle_idle:				; 10 (bra.s) + 12 (jmp)
-	tst.w	HLEV+PENDING		; 16
-	beq.s	.none			; 10 taken
-	movem.l	d0-d7/a0-a6,-(sp)
-	bsr	hle_run_job
-	movem.l	(sp)+,d0-d7/a0-a6
-	jmp	IDLE_RESUME
-.none:	PAD	(330-12-16-10-12)	; one full polling-loop period in total
-	jmp	IDLE_RESUME		; 12
+hle_idle:				; 12 (trampoline jmp; the hooked bra.s costs 10 like the original)
+	movem.l	d0-d2,-(sp)		;  32
+	move.l	HLEV+DEBT,d0		;  20
+	move.l	d0,HLEV+PROBE+8		;  20  probe 2: debt
+	clr.l	HLEV+DEBT		;  28
+	addi.l	#330*512,d0		;  16  (keeps it positive; 330*512 = 0 mod 330)
+	; d0 mod 330 in constant time (each step 48 cycles either way)
+MODSTEP		macro
+		cmpi.l	#(330<<\1),d0		; 14
+		bcs.s	.s\@			; 10 / 8
+		subi.l	#(330<<\1),d0		; 16
+		bra.s	.j\@			; 10
+.s\@:		PAD	24
+.j\@:
+		endm
+	MODSTEP	10
+	MODSTEP	9
+	MODSTEP	8
+	MODSTEP	7
+	MODSTEP	6
+	MODSTEP	5
+	MODSTEP	4
+	MODSTEP	3
+	MODSTEP	2
+	MODSTEP	1
+	MODSTEP	0			; 528
+	move.w	.dtab(pc,d0.w),d1	;  14  k:sled  (D = 82 + 10k + 4m, from the table)
+	bra	.dtabx			;  10
+.dtab:	IDLETAB_DATA
+.dtabx:	moveq	#0,d2			;   4
+	move.b	d1,d2			;   4
+	lsr.w	#8,d1			;  22
+.dl:	dbra	d1,.dl			;  10k + 14
+	jmp	.sled(pc,d2.w)		;  14
+.sled:	rept	DELAY_SLED
+	nop				;  4m
+	endr
+	move.l	d0,HLEV+PROBE+12	;  20  probe 3
+	movem.l	(sp)+,d0-d2		;  36
+	jmp	IDLE_RESUME		;  12   total 724 + D = -debt (mod 330)
 
 ; pack the results only (test benches that resynchronise state per command)
 hle_pack:
@@ -267,18 +325,6 @@ hle_pack:
 	lea	SHWIN,a4
 	bra	est_results
 
-; run the pending job (cmd 12: update, cmd 13: animate) and pack the results
-hle_run_job:
-	lea	HLEV,a5
-	lea	SHWIN,a4
-	move.w	PENDING(a5),d0
-	clr.w	PENDING(a5)
-	cmpi.w	#$13,d0
-	beq.s	.anim
-	bsr	cmd_12
-	bra	est_results
-.anim:	bsr	cmd_13
-	bra	est_results
 
 ; ---------------------------------------------------------------------------
 ; hle_bootcheck
@@ -367,47 +413,12 @@ cmd_0a:	move.l	$20(a4),GLOB+8(a5)
 cmd_16:	clr.w	$22(a4)			; RAM test passed
 	rts
 
-; cmd 11: EST reset
-cmd_11:	lea	POOL(a5),a0
-	moveq	#NOBJ-1,d0
-.k:	clr.w	(a0)
-	lea	OBJ_SIZE(a0),a0
-	dbra	d0,.k
-	lea	SYS(a5),a0
-	moveq	#$90/4-1,d0
-.c:	clr.l	(a0)+
-	dbra	d0,.c
-	lea	POOL(a5),a0
-	move.l	a0,S_SEARCH(a5)
-	rts
+; cmd 14 for the generic hle_latch_write path (other send() variants): run a pending
+; job, then pack. (d6 accumulates cycles there too; nothing reads it on this path.)
+cmd_14:	move.w	#1,$20(a4)
+	tst.w	PENDING(a5)
+	beq	est_results
+	bra	hle_run_job
 
-; cmd 12 / 13: start an EST job; the ARM would run it in the background and it
-; always completes before the 68k asks (cmd 14), so it is run here directly.
-cmd_12:	bsr.s	est_start
-	move.w	SYS+S_COUNT(a5),SYS+S_LATCHED(a5)
-	bsr	est_requests
-	bra	est_update
+	include	"job_acc.s"		; job.s with cycle accounting (tools/cycacc.py)
 
-cmd_13:	bsr.s	est_start
-	bsr	est_requests
-	bra	est_animate
-
-est_start:
-	lea	$1F00(a4),a0		; header (24 bytes) -> SYS[0..$17]
-	lea	SYS(a5),a1
-	move.l	(a0)+,(a1)+
-	move.l	(a0)+,(a1)+
-	move.l	(a0)+,(a1)+
-	move.l	(a0)+,(a1)+
-	move.l	(a0)+,(a1)+
-	move.l	(a0)+,(a1)+
-	clr.w	SYS+S_REMOVED_N(a5)
-	rts
-
-; cmd 14: collect results
-cmd_14:	move.w	#1,$20(a4)		; job already done
-	bra	est_results
-
-	include	"est_results.s"
-	include	"est_spawn.s"
-	include	"est_engine.s"

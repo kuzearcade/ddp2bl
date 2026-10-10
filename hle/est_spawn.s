@@ -1,7 +1,7 @@
 ; ---------------------------------------------------------------------------
 ; EST request processing (ARM $2280) and spawn/control handlers ($3C90 table)
 ; Register use while processing: a4 = SHWIN, a5 = HLEV, a2 = request (12 words),
-; REQN(a5) = remaining count. Handlers may use d0-d5, d7, a0, a1, a3, a6 (d6 is reserved).
+; REQN(a5) = remaining count. Handlers may use d0-d7, a0, a1, a6 (a3 is the cycle accumulator).
 ; ---------------------------------------------------------------------------
 
 ; request word n is at 2n(a2)
@@ -59,50 +59,52 @@ set_acc:
 set_vel:
 	lea	O_VX(a0),a6
 set_vxy:
+	; MULS timing depends on its source operand: the source here is always a sine
+	; table entry, so the data-dependent part (2n per product) comes from MULCOST.
 	move.l	a6,-(sp)		; destination
-	lea	SINTAB,a6
 	move.w	d0,d2
 	add.w	d2,d2
-	add.w	d2,d2
-	adda.w	d2,a6
-	move.w	2(a6),d3		; b
-	move.w	(a6),d2			; a
-	movea.l	(sp)+,a6
+	add.w	d2,d2			; angle * 4
+	lea	MULCOST,a6
+	adda.l	(a6,d2.w),a3		; @cyc-adjust: extra MULS cycles of both products
+	lea	SINTAB,a6
+	adda.w	d2,a6			; a6 -> {a, b}
+	move.w	d1,d2
+	muls.w	(a6),d2			; @muls-dyn  a * speed
+	move.w	d1,d3
+	muls.w	2(a6),d3		; @muls-dyn  speed * b
 	tst.w	d1
 	bmi.s	.big
-	muls.w	d1,d2
+	tst.l	d2
 	bpl.s	.p1
 	addi.l	#$ff,d2
 .p1:	asr.l	#8,d2
-	move.w	d2,(a6)+
-	muls.w	d1,d3
+	tst.l	d3
 	bpl.s	.p2
 	addi.l	#$ff,d3
 .p2:	asr.l	#8,d3
+	movea.l	(sp)+,a6
+	move.w	d2,(a6)+
 	move.w	d3,(a6)
 	rts
-.big:	; speed >= $8000: muls sees speed-$10000, so add the missing factor<<16
-	move.w	d2,-(sp)
-	move.w	d3,-(sp)
-	muls.w	d1,d2
+.big:	; speed >= $8000: muls saw speed-$10000, so add the missing sine<<16
 	swap	d2
-	add.w	2(sp),d2
+	add.w	(a6),d2
 	swap	d2
+	swap	d3
+	add.w	2(a6),d3
+	swap	d3
 	tst.l	d2
 	bpl.s	.b1
 	addi.l	#$ff,d2
 .b1:	asr.l	#8,d2
-	move.w	d2,(a6)+
-	muls.w	d1,d3
-	swap	d3
-	add.w	(sp),d3
-	swap	d3
 	tst.l	d3
 	bpl.s	.b2
 	addi.l	#$ff,d3
 .b2:	asr.l	#8,d3
+	movea.l	(sp)+,a6
+	move.w	d2,(a6)+
 	move.w	d3,(a6)
-	addq.l	#4,sp
 	rts
 
 ; halve_vanish: object a0 -> state 3 (vanish), wait 6, x-5, y-8, v /= 2 (toward 0)
@@ -281,7 +283,7 @@ sp_todebris:
 	move.w	d7,d3
 	add.w	d3,d3
 	lea	T_19C8,a1
-	move.w	(a1,d3.w),a3		; limit (kept in a3 as a word)
+	move.w	(a1,d3.w),TMP(a5)	; limit
 	move.w	d7,d2
 	lsl.w	#5,d2
 	addi.w	#$24,d2			; animation base
@@ -325,7 +327,7 @@ sp_todebris:
 	move.w	d0,O_VY(a0)
 	clr.l	O_AX(a0)		; AX and AY
 	move.l	d4,O_OX(a0)
-	move.w	a3,O_FLAG(a0)
+	move.w	TMP(a5),O_FLAG(a0)
 .n:	lea	OBJ_SIZE(a0),a0
 	dbra	d5,.l
 	rts
@@ -365,11 +367,10 @@ sp_multidebris:
 	add.w	d2,d2
 	subi.w	#$10,d2
 	movea.l	SYS+S_SEARCH(a5),a0
-	lea	POOL+(NOBJ-1)*OBJ_SIZE(a5),a3
 	move.w	12(a2),d5
 	beq.s	.done
 	subq.w	#1,d5
-.each:	cmpa.l	a3,a0
+.each:	cmpa.l	#HLEV+POOL+(NOBJ-1)*OBJ_SIZE,a0
 	bls.s	.c
 	lea	POOL(a5),a0
 .c:	tst.w	(a0)

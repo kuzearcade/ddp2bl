@@ -30,6 +30,7 @@ def main(target, arm_internal, out):
         "AIMTAB\t\tequ\t%s" % h("rom_aimtab"),
         "AIMTAB_SIZE\tequ\t$%X" % (0x4000 - 0x2C90),
         "CTRLPTR\t\tequ\t%s" % h("rom_ctrlptr"),
+        "MULCOST\t\tequ\t%s" % h("rom_mulcost"),
         "EXTROM\t\tequ\t%s" % h("rom_extrom"),
     ]
     for name, arm in (("T_ANIM", 0x080063E4), ("T_1714", 0x0800010C), ("T_1718", 0x08000100),
@@ -53,6 +54,27 @@ def main(target, arm_internal, out):
     for k, v in c14.items():
         lines.append("C14_%s\t\tequ\t%d" % (k.upper(), v))
     lines.append("FIRST_POLL_X10\tequ\t%d" % (tm["first_poll"] * 10))
+    # idle-loop phase lock: delay D for each r = (job cycles + idle_pre) mod period, such
+    # that idle_pre + job + (r..) + D + rest = 0 mod period; D = delay_fix + 10k + 4m
+    per, fix, sled = tm["idle_period"], tm["delay_fix"], tm["delay_sled"]
+    lines.append("IDLE_PRE\tequ\t%d" % tm["idle_pre"])
+    lines.append("DELAY_SLED\tequ\t%d" % sled)
+    lines.append("IDLETAB_DATA\tmacro")
+    words = []
+    for r in range(0, per, 2):
+        d = (-(r + tm["idle_after_r"])) % per
+        while True:
+            rest = d - fix
+            sol = [(k, m) for m in range(sled + 1) for k in [(rest - 4 * m) // 10]
+                   if rest - 4 * m >= 0 and (rest - 4 * m) % 10 == 0 and k < 256]
+            if sol:
+                k, m = sol[0]
+                break
+            d += per
+        words.append((k << 8) | ((sled - m) * 2))
+    for i in range(0, len(words), 12):
+        lines.append("\tdc.w\t" + ",".join("$%04X" % w for w in words[i:i + 12]))
+    lines.append("\tendm")
     lines.append("POLL_PERIOD_X10\tequ\t%d" % (tm["poll_period"] * 10))
     open(out, "w").write("\n".join(lines) + "\n")
 

@@ -13,7 +13,10 @@ $(BUILD)/$(TARGET).inc: targets/$(TARGET)/target.json tools/gen_target_inc.py
 	@mkdir -p $(BUILD)
 	python3 tools/gen_target_inc.py $(TARGET) $(ARM)/internal.bin $@
 
-$(BUILD)/$(TARGET).bin: $(BUILD)/$(TARGET).inc $(wildcard hle/*.s)
+$(BUILD)/job_acc.s: $(BUILD)/$(TARGET).inc hle/job.s hle/est_engine.s hle/est_spawn.s hle/est_results.s hle/hle.s tools/cycacc.py
+	python3 tools/cycacc.py hle/job.s $@ --symbols $(BUILD)/$(TARGET).inc --symbols hle/hle.s --report
+
+$(BUILD)/$(TARGET).bin: $(BUILD)/$(TARGET).inc $(BUILD)/job_acc.s $(wildcard hle/*.s)
 	cp $< $(BUILD)/target.inc
 	$(VASM) -I$(BUILD) -Ihle -o $@ -L $(BUILD)/$(TARGET).lst hle/hle.s
 

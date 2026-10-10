@@ -53,7 +53,7 @@
   "reloc_base": "0x818000",
   "reloc_size": "0x3400",
   "hlev_base": "0x81B400",
-  "hlev_size": "0x2390",
+  "hlev_size": "0x23A8",
   "hlev_latch_offset": "0x2388",
   "seq_var": "0x808C9C",
   "hle_base": "0x262000",
@@ -91,7 +91,8 @@
       "0a": 159,
       "11": 1270,
       "16": 1270,
-      "17": 1270
+      "17": 1270,
+      "01boot": 254
     },
     "cmd12": {
       "n0": 360,
@@ -105,7 +106,12 @@
       "state5": 340,
       "state67": 490,
       "removed": 112
-    }
+    },
+    "idle_pre": 0,
+    "idle_after_r": 724,
+    "delay_fix": 82,
+    "delay_sled": 4
   },
-  "frame_counter": "0x808D8E"
+  "frame_counter": "0x808D8E",
+  "rom_mulcost": "0x272000"
 }

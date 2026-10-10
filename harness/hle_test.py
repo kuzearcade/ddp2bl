@@ -29,7 +29,7 @@ from m68r import M68k  # noqa: E402
 # must match hle/hle.s and the generated target.inc
 SYMS = {}
 SYS_SIZE, POOL_OFF, OBJ, NOBJ = 0x90, 0x90, 0x44, 128
-GLOB_OFF, RNG_M1, RNG_S, RNG_K, RNG_J, LATCH_OFF, HLEV_SIZE = 0x2290, 0x22A0, 0x22A4, 0x2380, 0x2384, 0x2388, 0x2390
+GLOB_OFF, RNG_M1, RNG_S, RNG_K, RNG_J, LATCH_OFF, HLEV_SIZE = 0x2290, 0x22A0, 0x22A4, 0x2380, 0x2384, 0x2388, 0x23A8
 ARM_POOL, ARM_GLOB, ARM_RNG = 0x90, 0x2FA4, 0x3020
 
 
@@ -110,6 +110,8 @@ def rom_images(arm_dir):
         SYMS["AIMTAB"]: internal[0x2C90:0x4000],
         SYMS["EXTROM"]: hswap(external[0:0x13000]),
     }
+    from mulcost import mulcost_table
+    imgs[SYMS["MULCOST"]] = mulcost_table(internal)
     tab = struct.unpack_from("<I", external, 0x80)[0] - 0x08000000
     cnt = struct.unpack_from("<H", external, struct.unpack_from("<I", external, 0x84)[0] - 0x08000000)[0]
     imgs[SYMS["CTRLPTR"]] = b"".join(struct.pack(">I", ext_to_68k(struct.unpack_from("<I", external, tab + 4 * i)[0]))
