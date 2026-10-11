@@ -34,13 +34,15 @@ est_requests:
 find_free:
 	movea.l	SYS+S_SEARCH(a5),a0
 	lea	POOL+(NOBJ-1)*OBJ_SIZE(a5),a1
-.l:	cmpa.l	a1,a0
+	cmpa.l	a1,a0
 	bls.s	.c
-	lea	POOL(a5),a0
+.w:	lea	POOL(a5),a0
 .c:	tst.w	(a0)
 	beq.s	.f
 	lea	OBJ_SIZE(a0),a0
-	bra.s	.l
+	cmpa.l	a1,a0
+	bls.s	.c
+	bra.s	.w
 .f:	rts
 
 ; slot_by_index: a0 = POOL + d0.w * $44

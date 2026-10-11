@@ -1,8 +1,8 @@
 ; ---------------------------------------------------------------------------
 ; EST engine: per-frame update (ARM $55C) and animation-only pass (ARM $1730)
 ; Registers inside the object loop:
-;   a0 = object, d7 = y scroll offset (GLOB word 7), d6 = reserved (cycle accounting),
-;   a4 = SHWIN, a5 = HLEV, a3 = cycle accumulator. State routines may use d0-d6, a1, a2, a6.
+;   a0 = object, d7 = y scroll offset (GLOB word 7), d6 = slot counter,
+;   a4 = SHWIN, a5 = HLEV, a3 = cycle accumulator. State routines may use d0-d5, a1, a2, a6.
 ; ---------------------------------------------------------------------------
 
 ; SPLIT v, field, t1, t2 : v.w = accumulator value (s16)
@@ -17,6 +17,22 @@ SPLIT		macro
 		bra.s	.s\@
 .p\@:		andi.w	#$ff,\3		; v >= 0: q = v >> 8, r = v & $ff
 .s\@:		move.w	\3,\2(a0)
+		asr.w	#8,\1
+		endm
+
+; SPLITV v, vel, acc, t1, t2 : SPLIT with the next frame's velocity added in place
+;   acc(a0) <- remainder + vel(a0), v <- quotient
+SPLITV		macro
+		move.w	\1,\4
+		bpl.s	.p\@
+		addi.w	#$ff,\1
+		move.w	\1,\5
+		andi.w	#$ff00,\5
+		sub.w	\5,\4
+		bra.s	.s\@
+.p\@:		andi.w	#$ff,\4
+.s\@:		add.w	\2(a0),\4
+		move.w	\4,\3(a0)
 		asr.w	#8,\1
 		endm
 
@@ -37,18 +53,19 @@ SPRXY		macro
 ; The object loop accounts for itself: every slot is charged UPD_DEAD up front, a live
 ; slot adds UPD_LIVE-UPD_DEAD (its state routine accounts for itself, rts included), a
 ; slot above state 7 (skipped, as by the firmware) adds UPD_HIGH-UPD_DEAD.
-;   dead   8 + 10 + 8 + 14 + 10                               = 50
-;   live   8 + 8 + 8 + 8 + 8 + 4 + 14 + 22 + 8 + 14 + 10        = 112
-;   high   8 + 8 + 8 + 10 + 8 + 10 + 8 + 14 + 10               = 84
-; plus the entry bra.s (10), minus 2 for the last bls.s (not taken: 8).
-UPD_DEAD	equ	50
-UPD_LIVE	equ	112
-UPD_HIGH	equ	84
+;   dead   8 + 10 + 8 + 10                                    = 36
+;   live   8 + 8 + 8 + 8 + 8 + 4 + 14 + 22 + 8 + 10            = 98
+;   high   8 + 8 + 8 + 10 + 8 + 10 + 8 + 10                    = 70
+; plus the entry bra.s (10) and 4 for the last dbra (falls through: 14).
+UPD_DEAD	equ	36
+UPD_LIVE	equ	98
+UPD_HIGH	equ	70
 
 est_update:
 	move.w	GLOB+14(a5),d7
 	lea	POOL(a5),a0
-	lea	NOBJ*UPD_DEAD+10-2(a3),a3	; @cyc-adjust
+	moveq	#NOBJ-1,d6
+	lea	NOBJ*UPD_DEAD+10+4(a3),a3	; @cyc-adjust
 	; @cyc-off
 	bra.s	.loop			; 10
 .high:	lea	UPD_HIGH-UPD_DEAD(a3),a3	;  8  @cyc-adjust
@@ -62,8 +79,7 @@ est_update:
 	move.w	.tab-2(pc,d0.w),d0	; 14
 	jsr	.tab(pc,d0.w)		; 22
 .next:	lea	OBJ_SIZE(a0),a0		;  8
-	cmpa.l	#HLEV+POOL+(NOBJ-1)*OBJ_SIZE,a0	; 14
-	bls.s	.loop			; 10 / 8
+	dbra	d6,.loop		; 10 / 14
 	; @cyc-on
 	tst.w	SYS+$12(a5)
 	beq.s	.t1
@@ -201,6 +217,42 @@ aim:
 ; state 2: scripted bullet
 ; ---------------------------------------------------------------------------
 st2:
+	move.w	O_TIMER(a0),d0
+	beq	st2_script		; @unlikely
+	; Fast path (instruction still running): st2_timer's work with the velocity added
+	; to the remainder while it is in a register (taken back if the bullet dies), and
+	; the four bounds as two unsigned ranges: -9 < y < $E8, -9 < x <= $1C7.
+	subq.w	#1,d0
+	move.w	d0,O_TIMER(a0)
+	move.w	O_AX(a0),d4
+	SPLITV	d4,O_VX,O_AX,d0,d1
+	move.w	O_AY(a0),d5
+	SPLITV	d5,O_VY,O_AY,d0,d1
+	add.w	O_X(a0),d4		; x
+	add.w	O_Y(a0),d5
+	add.w	d7,d5			; y
+	move.w	d5,d0
+	addq.w	#8,d0
+	cmpi.w	#$e8+8,d0
+	bcc.s	.off			; @unlikely
+	move.w	d4,d0
+	addq.w	#8,d0
+	cmpi.w	#$1c8+8,d0
+	bcc.s	.off			; @unlikely
+.on:	SPRXY	d4,d5,O_OX(a0),O_OY(a0),d0
+	move.w	d4,O_X(a0)
+	move.w	d5,O_Y(a0)
+	subq.w	#1,O_ACNT(a0)		; counter at 0: it wraps (carry), reloaded by st2_frame
+	bcs	st2_frame		; @unlikely
+	rts
+.off:	tst.w	O_FLAG(a0)
+	bne.s	.on
+	move.w	O_VX(a0),d0		; dies: the remainder as the firmware leaves it
+	sub.w	d0,O_AX(a0)
+	move.w	O_VY(a0),d0
+	sub.w	d0,O_AY(a0)
+	bra	op_kill
+st2_script:
 	move.w	O_AX(a0),d4
 	SPLIT	d4,O_AX,d0,d1
 	move.w	O_AY(a0),d5
@@ -208,11 +260,6 @@ st2:
 	add.w	O_X(a0),d4		; x
 	add.w	O_Y(a0),d5
 	add.w	d7,d5			; y
-	move.w	O_TIMER(a0),d0
-	beq.s	.script			; @unlikely
-	subq.w	#1,d0
-	bra	st2_timer
-.script:
 	movea.l	O_SCRIPT(a0),a1
 st2_exec:
 	move.w	2(a1),d0		; opcode
@@ -436,14 +483,14 @@ st2_timer:
 	add.w	d0,O_AX(a0)
 	move.w	O_VY(a0),d0
 	add.w	d0,O_AY(a0)
-	move.w	O_ACNT(a0),d0
-	beq.s	.frame			; @unlikely
 	subq.w	#1,O_ACNT(a0)
+	bcs.s	st2_frame		; @unlikely
 	rts
 .off:	tst.w	O_FLAG(a0)
 	bne.s	.on
 	bra	op_kill
-.frame:	move.w	O_APER(a0),O_ACNT(a0)
+st2_frame:
+	move.w	O_APER(a0),O_ACNT(a0)
 	move.w	O_AFRAME(a0),d0
 	move.w	d0,d1
 	subq.w	#1,d1

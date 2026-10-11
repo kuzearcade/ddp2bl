@@ -63,6 +63,20 @@ def print_routines(per, njobs):
         print("  %-24s %6.2f%% %10.0f/job" % (k, 100.0 * v / tot, v / njobs))
 
 
+def print_pcs(top):
+    """Hottest instructions of the bench profile: cycles, PC, nearest symbol + offset."""
+    import ctypes
+    lo = H.SYMS["HLE_BASE"]
+    n = 0x10000
+    buf = (ctypes.c_uint32 * (n // 2))()
+    m68r._lib.m68r_prof_get(ctypes.c_uint32(lo), n // 2, buf)
+    syms = sorted((v, k) for k, v in H.SYMS.items() if lo <= v < lo + n)
+    hot = sorted(((buf[i], lo + 2 * i) for i in range(n // 2) if buf[i]), reverse=True)[:top]
+    for c, pc in hot:
+        v, k = max((s for s in syms if s[0] <= pc), default=(0, "?"))
+        print("  %8d  %06x  %s+%x" % (c, pc, k, pc - v))
+
+
 def print_profile(jobs):
     """Cycles per routine (nearest preceding symbol of the listing) over all profiled jobs."""
     import ctypes
@@ -93,6 +107,7 @@ def main():
     ap.add_argument("--profile", action="store_true", help="cycles of cmd 14 jobs per routine")
     ap.add_argument("--jobs-out", help="write 'video_frame cycles E14' for every cmd 14 that ran the job")
     ap.add_argument("--profile-heaviest", action="store_true", help="with --profile: only the most expensive job")
+    ap.add_argument("--profile-frame", type=int, help="with --profile: only the job collected in this video frame")
     a = ap.parse_args()
 
     H.load_syms(os.path.join(ROOT, "hle", "build"))
@@ -155,16 +170,17 @@ def main():
             cpu.load(H.SYMS["SEQVAR"], bytes([seq]))
             cpu.set_reg(2, cmd)
             job_was_pending = cpu.dump(H.SYMS["HLEV"] + 0x238A, 2) != b"\0\0"
-            prof = a.profile and cmd == 0x14 and job_was_pending
+            prof = a.profile and cmd == 0x14 and job_was_pending and \
+                (a.profile_frame is None or ev.frame == a.profile_frame)
             if prof:
-                if a.profile_heaviest:
+                if a.profile_heaviest or a.profile_frame is not None:
                     m68r._lib.m68r_prof_clear()
                 m68r._lib.m68r_prof(1)
             c = cpu.call(H.SYMS["hle_send"], max_cycles=50_000_000)
             if prof:
                 m68r._lib.m68r_prof(0)
                 jobs.append(c)
-                if a.profile_heaviest and c > heaviest[0]:
+                if (a.profile_heaviest or a.profile_frame is not None) and c > heaviest[0]:
                     heaviest[:] = [c, ev.frame, routine_profile()]
             cyc[cmd][c] += 1
             if cmd in (0x12, 0x13):
@@ -179,7 +195,8 @@ def main():
                 st_ = [int.from_bytes(hl[0x90 + i * 0x44:0x92 + i * 0x44], "big") for i in range(128)]
                 cnt = [sum(1 for v in st_ if 1 <= v <= 3), st_.count(4), st_.count(5), sum(1 for v in st_ if v >= 6)]
                 rem = int.from_bytes(hl[0x18:0x1a], "big")
-                jobs_out.write("%d %d %d %d %d %d %d %d\n" % ((ev.frame, c, e14) + tuple(cnt) + (rem,)))
+                a3 = int.from_bytes(cpu.dump(H.SYMS["HLEV"] + 0x2396, 4), "big")
+                jobs_out.write("%d %d %d %d %d %d %d %d %d\n" % ((ev.frame, c, e14) + tuple(cnt) + (rem, c - a3)))
             if a.limit and n - a.skip >= a.limit:
                 break
         elif ev.type == 2 and started and cmd is not None and (ev.value & 0xff) != 0x80:
@@ -206,9 +223,11 @@ def main():
             cmd = None
     print("commands: %d" % (n - a.skip))
     if a.profile and jobs:
-        if a.profile_heaviest:
+        if a.profile_heaviest or a.profile_frame is not None:
             print("heaviest job: %d cycles, frame %d" % (heaviest[0], heaviest[1]))
             print_routines(heaviest[2], 1)
+            if a.profile_frame is not None:
+                print_pcs(60)
         else:
             print_profile(jobs)
     for k, v in sorted(st.items()):

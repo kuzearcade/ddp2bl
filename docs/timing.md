@@ -43,6 +43,16 @@ cycles measured). The ARM answers "not done" at once without packing, the game b
 1,024 loop passes (~18,700 cycles) and asks again; by then the job has long finished
 (17,350+ cycles of margin). The replacement reproduces this (1,514 of 1,514 occurrences).
 
+The ARM can also be busy after cmd 12, when its update job takes longer than the game
+code between cmd 12 and cmd 14 (25,000-30,000 cycles in heavy frames). Measured over the
+full game: ARM jobs up to 31,434 cycles, often finishing only 900-2,000 cycles before cmd 14,
+and once (the final boss's death, 115 bullets turned into debris) 4,722 cycles too late:
+the game waited ~18,700 cycles and asked again. The replacement does not model this case
+(the 68000 cannot measure the time from cmd 12 to cmd 14 precisely enough: no timer; the
+scanline counter has 1,280-cycle steps). Effect: that frame's results are the same, the
+original spends ~19,000 more cycles in it, and the protocol sequence byte is one step
+apart afterwards (docs/verification.md).
+
 **Interrupts during a send.** An interrupt taken between the latch write and a poll delays
 that poll by the handler's run time; if the reply has arrived by then, the send ends with
 fewer polls. The vblank handler (IRQ6, ~14,000 cycles) always ends the wait at the next
@@ -96,16 +106,28 @@ before the vblank interrupt in the same frame. From full-length captures of the 
 reference runs (57,000-58,000 gameplay frames each) and the job cost of every frame
 (`harness/hle_stream_test.py --jobs-out`):
 
-| run | worst frame margin | worst debt / slack | frames with debt/slack > 0.7 |
+| run | worst frame margin | worst debt / slack | frames the conversion makes late |
 |---|---|---|---|
-| L1p (1 player, invulnerable) | 34,487 cycles | 0.79 | 2 |
-| L2p (2 players, invulnerable) | 38,915 cycles | 0.74 | 14 |
-| Lnc (no cheats) | 61,081 cycles | 0.71 | 1 |
+| L1p (1 player, invulnerable, 60,000 frames) | 38,355 cycles | 0.77 | 0 |
+| L2p (2 players, invulnerable, 60,000 frames) | 53,471 cycles | 0.66 | 0 |
+| Lnc (no cheats, 60,000 frames) | 66,761 cycles | 0.68 | 0 |
+| full game (1 player, 145,900 frames, to the ending) | 11,801 cycles | 0.91 | 0 |
 
-The worst frames are bursts in which ~120 bullets turn into falling debris at once. An
-earlier build (job 25% slower) was late by 384 cycles in one such frame; the job was then
-optimised (cycle markers, packer, update dispatch, state-5/animation code) from 171,660 to
-137,274 cycles on that frame, with all outputs unchanged.
+The tightest frames are at the final boss: the original game itself is in slowdown there
+(74,040 of 137,537 job frames of the full game are late in the original), so the
+conversion has only until the next vblank interrupt, and the screen is full of bullets
+(126 in state 2 at the worst frame). Other bursts are many bullets turning into falling
+debris at once. History: a build with a 25% slower job was late by 384 cycles in such a
+burst; the next one by 5,317 cycles at the final boss (found by the full-game test). The job
+was optimised both times with all outputs unchanged (cycle markers, packer dispatch with
+states 1-3 first, update loop counted with `dbra`, a state-2 fast path for bullets whose
+script instruction is still running, a tighter free-slot search): the final-boss frame went
+from 139,406 to 122,288 cycles.
+
+This margin is a property of the inputs, not a guarantee: in a slowdown frame the time
+left before the next vblank depends on how much the game itself had to do. A scene heavier
+than any in these runs could leave less than the job needs; the game would then drop one
+update there (the original would not).
 
 ## Residual differences (measured, by design or unavoidable)
 

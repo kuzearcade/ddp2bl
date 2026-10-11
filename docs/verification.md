@@ -54,7 +54,7 @@ set vs converted set, both with per-cycle interleave:
 |---|---|---|---|---|---|---|---|---|
 | L1p | 1 player, aiming bot, lives + invulnerability cheats | 0 / 60001 differ | 0 | 0 | 0 | 0 / 59374 | 0 | 0 |
 | L2p | 2 players, cheats for both | 0 / 60001 | 0 | 0 | 16,038 frames (see below) | 0 / 59374 | 0 | 0 |
-| Lnc | no cheats, credits | 0 / 60001 | 0 | 0 | 0 | 0 / 59364 | 0 | 0 |
+| Lnc | no cheats, credits | 0 / 60001 | 0 | 0 | 0 | 31 / 59364 (stale stack, see below) | 0 | 0 |
 
 "Lag pattern": the video frame in which the game starts each of its logical frames, i.e.
 slowdown is identical frame for frame.
@@ -63,14 +63,60 @@ Differences that remain, all explained (docs/timing.md):
 * main RAM sampled at the video frame boundary and Z80 RAM: the 68000's timeline inside a
   frame (between cmd 14 and the vblank wait) is shifted by the bullet job, so these are
   sampled at a different point of the same work;
-* the three bookkeeping records above (full canonical RAM differs only there: game-logic
-  RAM, which masks just them, is identical in every logical frame);
+* the three bookkeeping records above (game-logic RAM masks just them);
+* Lnc, logical frames 50,922-50,952: 18 bytes at `$81FF60-$81FF7F`, leftover data near the
+  top of the stack that no code has written since (the same values in both sets, displaced
+  by 8 bytes: an interrupt frame taken at a different depth); the game overwrites them
+  identically 31 frames later. Seen with the current build only, whose shorter job changes
+  the idle-loop phase (the previous build had a different phase there and 0 such frames);
 * L2p VRAM: 160 background tile attribute words written from an uninitialised local
   (game bug at `$13F4C6`, value comes from an earlier interrupt's stack frame); the tiles
   are blank, every rendered pixel is identical.
 
 Timing margin of the conversion over all gameplay frames of the three sessions: at least
-34,487 cycles (worst debt/slack 0.79), docs/timing.md.
+38,355 cycles (worst debt/slack 0.77), docs/timing.md.
 
 Job cycle accounting in MAME: measured - accounted constant (38 cycles of probe overhead)
 for every job not hit by an interrupt.
+
+## Full game, start to ending (`harness/fullgame.sh`)
+
+One player plays the whole game: the aiming bot with lives and invulnerability cheats,
+recorded on the protected set (`harness/inputs/fullgame_1p.txt.gz`), 145,900 video frames
+(40.5 minutes): all stages, the final boss (from ~frame 90,800, mostly in slowdown), its
+defeat (~108,300), the ending ("THE END" ~109,800), the high-score entry (1st place,
+664,852,000) and the start of a new game. Both sets replayed with per-cycle interleave.
+
+| check | result |
+|---|---|
+| rendered pixels, VRAM, palette, video registers | identical in all 145,901 video frames |
+| sound commands per logical frame | identical (145,250 logical frames) |
+| lag pattern (video frame of each logical frame) | identical |
+| game-logic RAM per logical frame | identical up to logical frame 107,543; afterwards 2 bytes differ (below) |
+| screenshots (every 1,000 frames, every 100 around the ending) | 245 of 245 identical |
+| protocol stream vs the 68000 replacement (`hle_stream_test.py`) | 701,137 of 701,139 shared-window states identical (the 2: the busy answer below) |
+| job cycle accounting in MAME (probe) | measured - accounted = 38 for all 137,540 jobs no interrupt hit |
+| timing margin (`margin.py`) | 0 late frames; worst 11,801 cycles (debt/slack 0.91) |
+
+The protected set itself replays deterministically (bot run and two replays identical).
+
+**The one difference: an ARM "busy" answer.** When the final boss dies (video frame
+108,173) 115 bullets turn into debris at once. That ARM job took 31,434 cycles, the game
+asked for the results after 26,712: the ARM answered "not done", the game waited and sent
+cmd 14 again. Each `send()` advances the protocol sequence byte, so from then on
+`$808C9C/$808C9D` (sequence number and its echo) are one step apart between the two sets
+(the converted set answers at once). Only the protocol code uses them (`send()` and its
+variants number each command with it and compare the ARM's echo; the boot check resets it to
+`$80`), so the game is otherwise identical; every pixel and sound
+command of the ending, the name entry and the next game matches. Over the whole capture it
+is the only busy answer outside the post-cmd-13 case (1 of 138,483 cmd 14). Reproducing it
+would need the 68000 to know the time between cmd 12 and cmd 14 (it has no timer; the
+scanline counter at `$B07000` is 1,280 cycles coarse) and a cycle model of the ARM job;
+many frames have the ARM finish only 900-2,000 cycles before cmd 14 (docs/timing.md).
+
+**Found and fixed by this test.** The first full-game run (previous build) diverged at
+logical frame 90,204, the final boss: the original is in slowdown there and the bullet job
+(126 bullets, 139,406 cycles) overran the time left before the vblank by 5,317 cycles, so
+the game dropped one update; the pictures differed from then on (same stages, different
+scores). The job was made faster (state-2 bullet fast path, packer dispatch, update loop
+counter, free-slot search; outputs unchanged): 122,288 cycles on that frame.
