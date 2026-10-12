@@ -9,3 +9,7 @@ harness/m68k/m68kops.[ch]
 harness/m68k/m68kmake
 oracle/libestmodel.so
 snap/
+# hle/build: only the assembled 68000 code is committed (tools/ddp2bl_build.py needs it);
+# the include, job code and listing are make intermediates
+hle/build/*
+!hle/build/*.bin
