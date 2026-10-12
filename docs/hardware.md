@@ -36,7 +36,8 @@ and data bus work with the ASIC removed or dead has to be checked on the board (
 ## Battery-backed RAM
 
 PGM main RAM is battery backed; the converted game keeps its ARM-replacement state there
-(at $818000-$81D7A7, an area the original game never uses). Whatever a previous session
+(at $818000-$81DCC1, an area the original game never uses; the deepest stack write
+in a whole two-player game is $81FC36). Whatever a previous session
 left there does not matter: the game's cold-reset entry (patched, same cycle count) resets
 what a reset of the IGS027A resets (latch "ready", region word, protocol state), and the
 game re-initialises the bullet engine itself with cmd 11 at start-up, as it did with the ASIC.

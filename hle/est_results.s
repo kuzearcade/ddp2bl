@@ -171,6 +171,9 @@ DIVSTEP		macro
 	move.w	d1,E14(a5)
 	subq.w	#3,d1
 	move.w	d1,E14M3(a5)		; the cmd 14 wait loop count (hle_send)
+	neg.w	d1
+	addi.w	#$270c,d1
+	move.w	d1,POLLW(a5)		; its poll residue, $270F - E (hle_send)
 	move.w	SYS+S_REMOVED_N(a5),d0
 	beq.s	.done
 	move.w	d0,$1F18(a4)

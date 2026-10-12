@@ -74,7 +74,8 @@ def main():
         if s is None or f not in jobs:
             continue
         c, e = jobs[f]
-        debt = c / a.speedup - (266 + 94 * e) + 74       # +74: measured send() overhead difference
+        debt = c / a.speedup - (266 + 94 * e) + 58       # +58: measured send() overhead difference
+        # (the bench times hle_send from its entry, 16 cycles before the original's cycle 0)
         rows.append((abs(s) - debt, k, f, s, debt, c, e))
     rows.sort()
     print("frames with a job: %d; original late (slack < 0): %d" % (len(rows), sum(1 for r in rows if r[3] < 0)))

@@ -168,7 +168,7 @@ def main():
                         st["engine_ok"] += 1
                     pending_cmd = None
             cpu.load(H.SYMS["SEQVAR"], bytes([seq]))
-            cpu.set_reg(2, cmd)
+            H.set_cmd(cpu, cmd)
             job_was_pending = cpu.dump(H.SYMS["HLEV"] + 0x238A, 2) != b"\0\0"
             prof = a.profile and cmd == 0x14 and job_was_pending and \
                 (a.profile_frame is None or ev.frame == a.profile_frame)

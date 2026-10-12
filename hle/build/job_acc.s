@@ -78,23 +78,24 @@ est_start:
 ;---------------------------------------------------------------------------
 ; irq_saved: how many polls the original saved because of the interrupt found during
 ; a send() wait (hle_send, send_irq). k = the original's first latch read after it:
-;   stacked PC before T_1 (prologue) or at a pass-1 handler's first instruction: k = 1;
-;   elsewhere in a pass-1 handler: k = 2; in send_wait, pass j = E - (saved loop
-;   counter): k = j at the pass's first instruction, else j + 1; in the last pass: none.
+;   stacked PC before T_1 (prologue) or at a pass-1 handler's first instruction (an
+;   entry of SEND_TAB): k = 1; elsewhere in a pass-1 handler: k = 2; in send_wait or
+;   send_wait_pv, pass j = E - (saved loop counter): k = j at the pass's first
+;   instruction, else j + 1; in the last pass: none.
 ; HLEV+IRQ_S = max(0, min(E + 1 - k, skip)); skip = IRQ4_SKIP, or any for the vblank
 ; handler (its first return address is IRQ6_RET).
 ;---------------------------------------------------------------------------
 irq_saved:
-	lea	172(a3),a3		; [cyc] block
-	movem.l	d1-d2/a0,-(sp)
+	lea	180(a3),a3		; [cyc] block
+	movem.l	d0-d2/a0,-(sp)
 	moveq	#0,d2
 	move.w	HLEV+IRQ_PC,d2
 	cmpi.w	#(SEND_P1&$ffff),d2
 	bcs	.k1
-	lea	46(a3),a3		; [cyc] fall-through
-	cmpi.w	#(send_wait&$ffff),d2
+	lea	-50(a3),a3		; [cyc] fall-through
+	cmpi.w	#(SEND_WAITS&$ffff),d2
 	bcs	.p1
-	lea	-28(a3),a3		; [cyc] fall-through
+	lea	68(a3),a3		; [cyc] fall-through
 	cmpi.w	#(SEND_LAST&$ffff),d2
 	bcc	.none
 	lea	94(a3),a3		; [cyc] fall-through
@@ -102,18 +103,24 @@ irq_saved:
 	sub.w	HLEV+IRQ_D2,d1	; j
 	cmpi.w	#(send_wait&$ffff),d2
 	beq	.calc
+	lea	28(a3),a3		; [cyc] fall-through
+	cmpi.w	#(send_wait_pv&$ffff),d2
+	beq	.calc
 	lea	24(a3),a3		; [cyc] fall-through
 	addq.w	#1,d1
 	bra	.calc
 .p1:
-	cmpi.w	#(snd_14&$ffff),d2
+	lea	SEND_TAB,a0	; a handler's entry: just before read 1
+	moveq	#SEND_TABN-1,d1
+.t:
+	lea	132(a3),a3		; [cyc] block
+	move.w	(a0)+,d0
+	addi.w	#(SEND_TAB&$ffff),d0
+	cmp.w	d0,d2
 	beq	.k1
-	lea	52(a3),a3		; [cyc] fall-through
-	ori.l	#(HLE_BASE&$ffff0000),d2
-	movea.l	d2,a0
-	cmpi.w	#$2201,(a0)	; MARK
-	beq	.k1
-	lea	20(a3),a3		; [cyc] fall-through
+	lea	-74(a3),a3		; [cyc] fall-through
+	dbra	d1,.t
+	lea	116(a3),a3		; [cyc] fall-through
 	moveq	#2,d1
 	bra	.calc
 .k1:
@@ -136,11 +143,11 @@ irq_saved:
 	move.w	d1,d2
 .st:
 	move.w	d2,HLEV+IRQ_S
-	movem.l	(sp)+,d1-d2/a0
+	movem.l	(sp)+,d0-d2/a0
 	rts
 .none:
 	clr.w	HLEV+IRQ_S
-	movem.l	(sp)+,d1-d2/a0
+	movem.l	(sp)+,d0-d2/a0
 	rts
 
 ; ---------------------------------------------------------------------------
@@ -174,7 +181,7 @@ PK_S67		equ	338
 PK_HIGH		equ	322
 
 est_results:
-	lea	1124(a3),a3		; [cyc] block
+	lea	1148(a3),a3		; [cyc] block
 	lea	POOL(a5),a0
 	lea	$1500(a4),a1
 	lea	$0EC0(a4),a2
@@ -351,6 +358,9 @@ est_results:
 	move.w	d1,E14(a5)
 	subq.w	#3,d1
 	move.w	d1,E14M3(a5)	; the cmd 14 wait loop count (hle_send)
+	neg.w	d1
+	addi.w	#$270c,d1
+	move.w	d1,POLLW(a5)	; its poll residue, $270F - E (hle_send)
 	move.w	SYS+S_REMOVED_N(a5),d0
 	beq	.done
 	lea	26(a3),a3		; [cyc] fall-through
@@ -1116,9 +1126,9 @@ est_animate:
 ; ---------------------------------------------------------------------------
 anim_down:
 	subq.w	#1,O_ACNT(a0)	; counter at 0: it wraps (carry), reload below
-	bcs	.cyc_stub158	; @unlikely
+	bcs	.cyc_stub160	; @unlikely
 	rts
-.cyc_stub158:
+.cyc_stub160:
 	lea	234(a3),a3		; [cyc] unlikely edge
 	bra	anim_down_f
 anim_down_f:
@@ -1135,9 +1145,9 @@ anim_down_f:
 
 anim_up:
 	subq.w	#1,O_ACNT(a0)
-	bcs	.cyc_stub163	; @unlikely
+	bcs	.cyc_stub165	; @unlikely
 	rts
-.cyc_stub163:
+.cyc_stub165:
 	lea	238(a3),a3		; [cyc] unlikely edge
 	bra	.f
 .f:
@@ -1243,7 +1253,7 @@ aim:
 st2:
 	lea	448(a3),a3		; [cyc] block
 	move.w	O_TIMER(a0),d0
-	beq	.cyc_stub182	; @unlikely
+	beq	.cyc_stub184	; @unlikely
 	; Fast path (instruction still running): st2_timer's work with the velocity added
 	; to the remainder while it is in a register (taken back if the bullet dies), and
 	; the four bounds as two unsigned ranges: -9 < y < $E8, -9 < x <= $1C7.
@@ -1258,7 +1268,7 @@ st2:
 	andi.w	#$ff00,d1
 	sub.w	d1,d0
 	bra	.s_9
-.cyc_stub182:
+.cyc_stub184:
 	lea	132(a3),a3		; [cyc] unlikely edge
 	bra	st2_script
 .p_9:
@@ -1288,11 +1298,11 @@ st2:
 	move.w	d5,d0
 	addq.w	#8,d0
 	cmpi.w	#$e8+8,d0
-	bcc	.cyc_stub189	; @unlikely
+	bcc	.cyc_stub191	; @unlikely
 	move.w	d4,d0
 	addq.w	#8,d0
 	cmpi.w	#$1c8+8,d0
-	bcc	.cyc_stub190	; @unlikely
+	bcc	.cyc_stub192	; @unlikely
 .on:
 	move.w	d4,d0
 	sub.w	O_OX(a0),d0
@@ -1307,15 +1317,15 @@ st2:
 	move.w	d4,O_X(a0)
 	move.w	d5,O_Y(a0)
 	subq.w	#1,O_ACNT(a0)	; counter at 0: it wraps (carry), reloaded by st2_frame
-	bcs	.cyc_stub191	; @unlikely
+	bcs	.cyc_stub193	; @unlikely
 	rts
-.cyc_stub189:
+.cyc_stub191:
 	lea	10(a3),a3		; [cyc] unlikely edge
 	bra	.off
-.cyc_stub190:
+.cyc_stub192:
 	lea	38(a3),a3		; [cyc] unlikely edge
 	bra	.off
-.cyc_stub191:
+.cyc_stub193:
 	lea	228(a3),a3		; [cyc] unlikely edge
 	bra	st2_frame
 .off:
@@ -1603,13 +1613,13 @@ st2_advance:
 st2_timer:
 	move.w	d0,O_TIMER(a0)
 	cmpi.w	#-9,d5
-	ble	.cyc_stub240	; @unlikely
+	ble	.cyc_stub242	; @unlikely
 	cmpi.w	#$e8,d5
-	bge	.cyc_stub241	; @unlikely
+	bge	.cyc_stub243	; @unlikely
 	cmpi.w	#-9,d4
 	ble	.off	; @unlikely
 	cmpi.w	#$1c7,d4
-	bgt	.cyc_stub243	; @unlikely
+	bgt	.cyc_stub245	; @unlikely
 .on:
 	move.w	d4,d0
 	sub.w	O_OX(a0),d0
@@ -1628,18 +1638,18 @@ st2_timer:
 	move.w	O_VY(a0),d0
 	add.w	d0,O_AY(a0)
 	subq.w	#1,O_ACNT(a0)
-	bcs	.cyc_stub244	; @unlikely
+	bcs	.cyc_stub246	; @unlikely
 	rts
-.cyc_stub240:
+.cyc_stub242:
 	lea	-22(a3),a3		; [cyc] unlikely edge
 	bra	.off
-.cyc_stub241:
+.cyc_stub243:
 	lea	-2(a3),a3		; [cyc] unlikely edge
 	bra	.off
-.cyc_stub243:
+.cyc_stub245:
 	lea	38(a3),a3		; [cyc] unlikely edge
 	bra	.off
-.cyc_stub244:
+.cyc_stub246:
 	lea	228(a3),a3		; [cyc] unlikely edge
 	bra	st2_frame
 .off:
@@ -2054,9 +2064,9 @@ st5:
 	ori.w	#$8000,d0
 	move.w	d0,O_SPRY(a0)
 	subq.w	#1,O_ACNT(a0)	; anim_down, inline
-	bcs	.cyc_stub314	; @unlikely
+	bcs	.cyc_stub316	; @unlikely
 	rts
-.cyc_stub314:
+.cyc_stub316:
 	lea	234(a3),a3		; [cyc] unlikely edge
 	bra	anim_down_f
 

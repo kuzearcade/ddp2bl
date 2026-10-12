@@ -130,7 +130,7 @@ def main():
         cpu.load(H.SYMS["SEQVAR"], bytes([seq]))
         if cmd == 0x14:
             cpu.call(H.SYMS["hle_pack"], max_cycles=50_000_000)      # done in the idle loop in the game
-        cpu.set_reg(2, cmd)
+        H.set_cmd(cpu, cmd)
         cpu.call(H.SYMS["hle_send"], max_cycles=20_000_000)
         if cmd in (0x12, 0x13):
             cpu.call(H.SYMS["hle_run_job"], max_cycles=50_000_000)   # what hle_idle does

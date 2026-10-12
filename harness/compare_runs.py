@@ -63,6 +63,19 @@ def main():
         for name, b in (("game RAM", ram_bad), ("game-logic RAM", ms_bad), ("sound cmds", snd_bad), ("video frame", vf_bad)):
             rr = ranges(b)
             print("  %-11s differing: %-7d %s" % (name, len(b), " ".join("%d-%d" % x for x in rr[:12]) + (" ..." if len(rr) > 12 else "")))
+        # "video frame" above is MAME's frame counter, which ticks 42,000-53,000 cycles into
+        # the game's frame; the game itself counts frames from the vblank interrupt (every
+        # 337,920 cycles). With slack.txt (tools/lua/slack.lua) in both runs: the vblank
+        # period in which each logical frame starts (the game's frame pacing).
+        sr, st = os.path.join(a.ref, "slack.txt"), os.path.join(a.test, "slack.txt")
+        if os.path.exists(sr) and os.path.exists(st):
+            wr = [float(l.split()[1]) for l in open(sr) if l.startswith("W ")]
+            wt = [float(l.split()[1]) for l in open(st) if l.startswith("W ")]
+            m = min(len(wr), len(wt), n)
+            vp_bad = [i + 1 for i in range(m) if int(wr[i] // 337920) != int(wt[i] // 337920)]
+            rr = ranges(vp_bad)
+            print("  %-11s differing: %-7d %s" % ("vbl period", len(vp_bad), " ".join("%d-%d" % x for x in rr[:12]) + (" ..." if len(rr) > 12 else "")))
+            bad_any += vp_bad
         bad_any += ram_bad + snd_bad + vf_bad
     return 1 if bad_any else 0
 

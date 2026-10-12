@@ -15,7 +15,7 @@ A gameplay frame (measured): vblank interrupt (the handler takes ~14,000 cycles 
 counts the vblank) → frame start → **09, 0A, 12** → 36,000-49,000 cycles of game code while
 the ARM runs the bullet job → **14** (collect) → **04** → the game's vblank wait (idle loop).
 
-`send()` (hook at `$145922`) writes the command, posts the sequence byte to the latch at
+`send()` writes the command (`$145922`, cycle 0 below), posts the sequence byte to the latch at
 +16..+44 cycles, then polls: poll *k* starts at +172 + 94(*k*-1). It returns at
 `266 + E*94`, E = extra polls = `ceil((D - 146) / 94)` for an ARM reply D cycles after the
 latch write:
@@ -189,14 +189,33 @@ frames; cycle-stamped 68000 traces aligned instruction by instruction):
   cycles instead of 910 + D; the once-a-minute clock read (countdown 0) and other callback
   sets use the old way.
 * **Interrupts during a send() wait.** The replacement's wait is laid out in 94-cycle
-  passes that start exactly at the original's latch reads; a sentinel word below the
-  stack pointer, armed where the original posts the latch, shows afterwards whether an
-  interrupt was taken, its stacked PC (and the saved loop counter) when, and the handler's
-  first return address which one. irq_saved (job.s) computes the polls the original saved;
-  the difference (and the cost of the check) goes into DEBT and is repaid at the idle
-  loop. A residual remains: the interrupt lands on a different instruction than in the
-  original, and the acknowledge is synchronised to the 10-cycle E clock, so 10-20 cycles
-  can remain (seen at frame 990 of the session).
+  passes that start exactly at the original's latch reads; a sentinel word (0) at -2(sp),
+  armed where the original posts the latch, shows afterwards whether an interrupt was
+  taken, its stacked PC (and the saved loop counter) when, and the handler's first return
+  address which one. irq_saved (job.s) computes the polls the original saved; the
+  difference (and the cost of the check) goes into DEBT and is repaid at the idle loop.
+  The stack pointer stays where the original has it during the wait (d1 is no longer
+  pushed), so an interrupt's frame lands at the same address as there. A residual
+  remains: the interrupt lands on a different instruction than in the original, and the
+  acknowledge is synchronised to the 10-cycle E clock, so 10-20 cycles can remain (seen
+  at frame 990 of the session).
+* **Dead stack.** The original writes nothing below its stack pointer while it waits. The
+  replacement's hook starts one instruction earlier (`$14591E`, the instruction
+  that loads the command into d2, 16 cycles): it reads the command word from `10(a6)` itself
+  (12 cycles), which leaves the time to copy the word under the sentinel into d2's upper
+  half and still arm the sentinel at +32, before the original's latch post (+44): the
+  first latch read is still at +172. The word is put back after the sentinel check (from
+  d2, or from SAVEW for waits of more than one pass), and everything the replacement
+  calls during a send (the job, irq_saved) runs on a private stack in its own RAM
+  (PSTACK, $500 bytes; the deepest the game itself uses is 970 bytes, measured over the
+  two-player game), as do interrupts taken during the job. A send that no interrupt hit
+  leaves the dead stack exactly as the original does (bench: 30,000 sends, the 1 KB below
+  the stack pointer unchanged; before: 6 bytes on every send, more with the job). When an
+  interrupt hits, its frame is where the original's is, with the replacement's PC and
+  registers in it (the original's differ too).
+  The pass-1 marker instruction is gone (irq_saved recognises a handler's first
+  instruction from the dispatch table), commands with one extra poll do their last pass
+  inline, and the poll residue is written in pass 1 or 2, which frees the cycles.
 
 Result: the vblank interrupt lands on the same instruction in both sets in 31% of frames
 (before: 23%); in-step stretches are longer. The remaining offsets come from the residual
@@ -205,13 +224,6 @@ mispredictions, and the Z80 handshake itself once the Z80s differ. In the sessio
 two-player max-load game now diverges at logical frame 58,150 (before: 51,157), the
 two-player no-cheat game still at 9,642 (a stall in the original's own Z80 timing, which
 the original does not reproduce either with its Z80 detuned by 30 ppm).
-
-Side effect: the sentinel ($FFFF) is written into dead stack below the stack pointer,
-where the original leaves older data. Game code that reads uninitialised stack (as the
-blank-tile attribute bug does) can copy it: two RAM bytes in one logical frame of the
-one-player no-cheat game (`$80004A`, `$80F036`, `$FF` instead of `$00`), with one video
-frame's sprite buffer; no pixel differs. Restoring the word would need cycles the send
-prologue does not have (it must be armed by +44).
 
 Cost: the cmd 14 job path computes DEBT mod 330 (580 cycles, counted in the debt): every
 margin above is about 590 cycles smaller (tightest: 11,213 cycles, one-player final boss).

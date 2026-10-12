@@ -32,7 +32,7 @@
 
 		<!-- CART PROG: P1 (4MB, 68000 at 0x100000) -->
 		<part>03 00400000 00100000</part>
-		<part name="ddp2bl_p1.27c322" crc="a987e287"/>
+		<part name="ddp2bl_p1.27c322" crc="ce18c4a3"/>
 
 		<!-- CART TILE: T1 + T2 -->
 		<part>04 00800000 00180000</part>

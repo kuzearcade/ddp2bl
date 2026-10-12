@@ -118,11 +118,12 @@ def main():
         filler = nop * ((len(expect) - 6) // 2)
         add(site, jmp(target) + filler, "%s:%06x" % (why, site))
 
-    # send(): the command write and the latch post -> jmp hle_send
+    # send(): from loading the command through the latch post (20 bytes) -> jmp hle_send
+    # (hle_send reads the command from 10(a6) itself; see its timing notes)
     s = int(cfg["send_hook"], 16)
-    hook(s, _Sha1Expect("b1886ae752a2ca75603cf74549f0fd33f9a1ccc9", 16), syms["hle_send"], "send")
-    latch_sites.remove(s + 6)
-    patches[:] = [p for p in patches if not p["why"].startswith("latch:%06x" % (s + 6))]
+    hook(s, _Sha1Expect("f95adf4142e5f3cad98d46fd54073bbf83e63912", 20), syms["hle_send"], "send")
+    latch_sites.remove(s + 10)
+    patches[:] = [p for p in patches if not p["why"].startswith("latch:%06x" % (s + 10))]
     # cold reset: the 1008-cycle delay loop (6 bytes, interrupts masked) -> "jsr hle_reset",
     # which does what the ARM does at power-on in exactly that time
     rs = int(cfg["reset_hook"], 16)

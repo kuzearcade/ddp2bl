@@ -234,3 +234,55 @@ reproduce it from one power-on to the next.
 | nc2p, 89,000 frames | diverges at 9,642 as before (the original's own stall) |
 | fuzzer / protocol streams / margins | 24,000 commands 0 mismatches; all windows identical except the busy answer; 0 predicted late frames |
 | job accounting in MAME | exact (38) on every job no interrupt hit |
+
+## Dead stack restored; frame pacing and sound (all four full-game sessions)
+
+Build with the dead-stack fix (docs/timing.md "Dead stack"): the send hook starts one
+instruction earlier, the word under the sentinel is put back, d1 is no longer pushed, and the
+job and irq_saved run on a private stack. Bench: 30,000 sends leave the 1 KB below the stack
+pointer unchanged (previous build: 6 bytes on every send); 40,000 per-command checks and 24,000
+fuzzer commands against the ARM firmware: 0 mismatches; timing margins (L1p/L2p/Lnc): no late
+frames, the job path 60 cycles dearer than before.
+
+| session | frames | display | game-logic RAM | frame starts (vblank period) |
+|---|---|---|---|---|
+| 1p, cheats | 145,900 | identical | stale stack (55-85), sequence byte after the busy answer | identical (MAME frame counter too) |
+| nc1p | 106,000 | identical | stale stack (51-81, 102,871-102,901) | identical; MAME counter: 1 (68,688) |
+| 2p max load | 81,200 | identical to video frame 57,652 | identical to logical 57,024 | identical before the divergence |
+| nc2p | 89,000 | identical to 10,265 (as before) | identical to 9,643 | identical before the divergence |
+
+The dead-stack residuals of the previous build (1p frame 15,970, nc1p frame 20,540) are gone.
+
+**Frame pacing.** The harness's "video frame" is MAME's frame counter, which ticks 42,000-53,000
+cycles into the game's frame, not at the vblank interrupt from which the game counts its
+frames. A frame start that moves by tens of thousands of cycles inside the same frame can cross
+that tick. compare_runs.py now also reports the vblank period each logical frame starts in
+("vbl period", from slack.txt): in every session it is identical up to the point where the
+games diverge. The MAME-counter shifts that remain come from two things the replacement cannot
+time exactly, both consequences of the residual 68000 phase offset (docs/timing.md):
+* the once-a-minute clock read in the vblank-wait callback (~26,000 cycles) runs after the
+  frame's vblank in one set and before it in the other when the vblank lands on different
+  sides of the callback's counter read (nc1p 68,688: start 26,000 cycles later, same period);
+* different Z80 ready waits (2p: 56,000-75,000 cycles in one set at 21,293, 28,031, 51,057,
+  54,775). At 57,023 the converted set waited 235,000 cycles for its Z80 (the original 78);
+  the frame still started in the same period, but late enough that the games diverged.
+Frame starts are cycle-identical in 25-34% of frames; the offset otherwise random-walks in
+E-clock steps (the vblank acknowledge lands 10-20 cycles apart in 41% of frames).
+
+**Sound** (tools/lua/sndmon.lua, tools/audiocheck.py; harness/fullgame.sh with AUDIO=1). The
+game hands sound commands to the Z80 as 4-byte packets in Z80 RAM after a ready handshake.
+
+| session | packets | Z80 read every packet | sound output (per-frame RMS vs original) |
+|---|---|---|---|
+| 1p | 39,831, identical, same frames | yes (2 at power-on, frames 8 and 612, in both sets) | level within ±0.5 dB (1st/99th percentile), no dropout, identical silent stretches |
+| nc1p | 16,672, identical, same frames | yes (same 2) | ±0.12 dB, no dropout, identical silent stretches |
+| 2p | identical to packet 37,145 (video frame 57,681) | yes (same 2) | before the divergence: ±3 dB, no dropout |
+| nc2p | identical to packet 4,469 (10,362) | yes (same 2) | before the divergence: ±0.9 dB, no dropout |
+
+Samples are bit-identical until the Z80s drift (frames 1,206-9,749); afterwards the same
+sounds play a few Z80 cycles apart. After the two-player games diverge, both sets play
+different but complete games: every silent stretch in either set is bracketed by the same
+commands in both (the game's own music stop and restart around the ending and name entry),
+and no packet goes unread. Long Z80 waits occur in both sets (original up to 217,589 cycles,
+converted up to 295,870); they delay the 68000 but never lose a command, because the game
+waits for the Z80 instead of overwriting.

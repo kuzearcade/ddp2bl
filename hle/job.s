@@ -62,19 +62,20 @@ est_start:
 ;---------------------------------------------------------------------------
 ; irq_saved: how many polls the original saved because of the interrupt found during
 ; a send() wait (hle_send, send_irq). k = the original's first latch read after it:
-;   stacked PC before T_1 (prologue) or at a pass-1 handler's first instruction: k = 1;
-;   elsewhere in a pass-1 handler: k = 2; in send_wait, pass j = E - (saved loop
-;   counter): k = j at the pass's first instruction, else j + 1; in the last pass: none.
+;   stacked PC before T_1 (prologue) or at a pass-1 handler's first instruction (an
+;   entry of SEND_TAB): k = 1; elsewhere in a pass-1 handler: k = 2; in send_wait or
+;   send_wait_pv, pass j = E - (saved loop counter): k = j at the pass's first
+;   instruction, else j + 1; in the last pass: none.
 ; HLEV+IRQ_S = max(0, min(E + 1 - k, skip)); skip = IRQ4_SKIP, or any for the vblank
 ; handler (its first return address is IRQ6_RET).
 ;---------------------------------------------------------------------------
 irq_saved:
-	movem.l	d1-d2/a0,-(sp)
+	movem.l	d0-d2/a0,-(sp)
 	moveq	#0,d2
 	move.w	HLEV+IRQ_PC,d2
 	cmpi.w	#(SEND_P1&$ffff),d2
 	bcs.s	.k1
-	cmpi.w	#(send_wait&$ffff),d2
+	cmpi.w	#(SEND_WAITS&$ffff),d2
 	bcs.s	.p1
 	cmpi.w	#(SEND_LAST&$ffff),d2
 	bcc.s	.none
@@ -82,14 +83,17 @@ irq_saved:
 	sub.w	HLEV+IRQ_D2,d1		; j
 	cmpi.w	#(send_wait&$ffff),d2
 	beq.s	.calc
+	cmpi.w	#(send_wait_pv&$ffff),d2
+	beq.s	.calc
 	addq.w	#1,d1
 	bra.s	.calc
-.p1:	cmpi.w	#(snd_14&$ffff),d2
+.p1:	lea	SEND_TAB,a0		; a handler's entry: just before read 1
+	moveq	#SEND_TABN-1,d1
+.t:	move.w	(a0)+,d0
+	addi.w	#(SEND_TAB&$ffff),d0
+	cmp.w	d0,d2
 	beq.s	.k1
-	ori.l	#(HLE_BASE&$ffff0000),d2
-	movea.l	d2,a0
-	cmpi.w	#$2201,(a0)		; MARK
-	beq.s	.k1
+	dbra	d1,.t
 	moveq	#2,d1
 	bra.s	.calc
 .k1:	moveq	#1,d1
@@ -105,10 +109,10 @@ irq_saved:
 	bls.s	.st
 	move.w	d1,d2
 .st:	move.w	d2,HLEV+IRQ_S
-	movem.l	(sp)+,d1-d2/a0
+	movem.l	(sp)+,d0-d2/a0
 	rts
 .none:	clr.w	HLEV+IRQ_S
-	movem.l	(sp)+,d1-d2/a0
+	movem.l	(sp)+,d0-d2/a0
 	rts
 
 	include	"est_results.s"

@@ -30,11 +30,18 @@ esac
 mkdir -p "$(dirname "$P")"
 gzip -dc harness/inputs/fullgame_$S.txt.gz > ${P}_inputs.txt
 L=$(pwd)/tools/lua
-mkdir -p ${P}_ref
-DDP2H_EXTRA_LUA=$L/slack.lua SLACK_OUT=${P}_ref/slack.txt \
+mkdir -p ${P}_ref ${P}_bl
+# both runs: vblank/idle log (slack.txt) and the sound path monitor (sound.txt,
+# tools/lua/sndmon.lua); AUDIO=1 also records the sound output (audio.wav, for
+# tools/audiocheck.py)
+wav() { [ -n "$AUDIO" ] && echo "-wavwrite $1/audio.wav"; }
+EXTRA_LUAS="$L/slack.lua;$L/sndmon.lua" DDP2H_EXTRA_LUA=$L/multi.lua \
+SLACK_OUT=${P}_ref/slack.txt SNDMON_OUT=${P}_ref/sound.txt \
 python3 harness/run.py --machine ddp2 --mode replay --inputs ${P}_inputs.txt --cheats "$C" --frames $F --perfect \
-    --capture --out ${P}_ref > /dev/null 2>&1 &
+    --capture --extra "$(wav ${P}_ref)" --out ${P}_ref > /dev/null 2>&1 &
+EXTRA_LUAS="$L/slack.lua;$L/sndmon.lua" DDP2H_EXTRA_LUA=$L/multi.lua \
+SLACK_OUT=${P}_bl/slack.txt SNDMON_OUT=${P}_bl/sound.txt \
 python3 harness/run.py --machine ddp2bl --rompath "$R" --mode replay --inputs ${P}_inputs.txt --cheats "$C" --frames $F \
-    --perfect --ptrlocs harness/inputs/fullgame_$S.ptrlocs --out ${P}_bl > /dev/null 2>&1 &
+    --perfect --ptrlocs harness/inputs/fullgame_$S.ptrlocs --extra "$(wav ${P}_bl)" --out ${P}_bl > /dev/null 2>&1 &
 wait
 python3 harness/compare_runs.py ${P}_ref ${P}_bl | tee ${P}.cmp | cut -c1-300

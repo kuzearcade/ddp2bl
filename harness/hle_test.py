@@ -33,6 +33,14 @@ GLOB_OFF, RNG_M1, RNG_S, RNG_K, RNG_J, LATCH_OFF, HLEV_SIZE = 0x2290, 0x22A0, 0x
 ARM_POOL, ARM_GLOB, ARM_RNG = 0x90, 0x2FA4, 0x3020
 
 
+def set_cmd(cpu, cmd):
+    """send(cmd)'s frame as hle_send sees it: a6 = frame pointer (above the stack pointer,
+    M68k.call's default 0x81FFF0), command long at 8(a6)."""
+    cpu.set_reg(14, 0x81FFF4)
+    cpu.load(0x81FFFC, cmd.to_bytes(4, "big"))
+    cpu.set_reg(2, cmd)
+
+
 def load_syms(build):
     import re
     for line in open(os.path.join(build, "ddp2_v102_world.lst")):
@@ -181,7 +189,7 @@ def main():
         cpu.load(shw, bytes(win))
         cpu.load(hlev, arm_to_hlev(wram))
         cpu.load(SYMS["SEQVAR"], bytes([seq]))
-        cpu.set_reg(2, cmd)            # D2 = command
+        set_cmd(cpu, cmd)
         try:
             if cmd == 0x14:
                 # the ARM ran the job in the background before this command (the captured
