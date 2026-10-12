@@ -237,7 +237,7 @@ index 00000000000..daa42439c68
 +
 +#endif // MAME_IGS_DDP2_CAPTURE_H
 diff --git a/src/mame/igs/pgm.cpp b/src/mame/igs/pgm.cpp
-index bef86aaf47f..963732ff251 100644
+index bef86aaf47f..87752ff2818 100644
 --- a/src/mame/igs/pgm.cpp
 +++ b/src/mame/igs/pgm.cpp
 @@ -479,6 +479,16 @@ u16 pgm_state::sprites_r(offs_t offset)
