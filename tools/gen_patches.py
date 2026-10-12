@@ -5,6 +5,8 @@ Input: the (unpatched) program ROM, a linear disassembly of it (MAME unidasm), t
 config. Output: targets/<t>/patches.json, a list of
     {"addr": int, "new": hex, "why": str}
 that tools/ddp2bl_build.py applies to the program (whose SHA1 it checks first).
+No original code goes into the output: no original bytes, no disassembly text; the
+expected code at the hook sites is checked here by SHA1.
 
 Patch kinds
   reloc   : 32-bit operand $00D0xxxx -> SHWIN + xxxx, $00D10000/1 -> latch variable
@@ -22,22 +24,6 @@ import re
 import sys
 
 LINE = re.compile(r"^([0-9a-f]+): ((?:[0-9a-f]{4} ?)+)\s+(\S+)\s*(.*)$")
-
-
-class _Sha1Expect:
-    """Expected original code, checked by SHA1 (no original bytes in the repository)."""
-    def __init__(self, sha, n):
-        self.sha, self.n = sha, n
-
-    def __len__(self):
-        return self.n
-
-    def __eq__(self, b):
-        return hashlib.sha1(bytes(b)).hexdigest() == self.sha
-
-    def __ne__(self, b):
-        return not self == b
-
 
 
 def load_symbols(listing):
@@ -110,25 +96,27 @@ def main():
 
     jmp = lambda target: bytes([0x4e, 0xf9]) + target.to_bytes(4, "big")
 
-    def hook(site, expect, target, why):
+    def expect(site, size, sha, why):
         o = site - base
-        if prog[o:o + len(expect)] != expect:
+        if hashlib.sha1(prog[o:o + size]).hexdigest() != sha:
             sys.exit("%s site %06x does not match the expected code" % (why, site))
-        patches[:] = [p for p in patches if not (site <= p["addr"] < site + len(expect))]
-        filler = nop * ((len(expect) - 6) // 2)
+
+    def hook(site, size, sha, target, why):
+        expect(site, size, sha, why)
+        patches[:] = [p for p in patches if not (site <= p["addr"] < site + size)]
+        filler = nop * ((size - 6) // 2)
         add(site, jmp(target) + filler, "%s:%06x" % (why, site))
 
     # send(): from loading the command through the latch post (20 bytes) -> jmp hle_send
     # (hle_send reads the command from 10(a6) itself; see its timing notes)
     s = int(cfg["send_hook"], 16)
-    hook(s, _Sha1Expect("f95adf4142e5f3cad98d46fd54073bbf83e63912", 20), syms["hle_send"], "send")
+    hook(s, 20, "f95adf4142e5f3cad98d46fd54073bbf83e63912", syms["hle_send"], "send")
     latch_sites.remove(s + 10)
     patches[:] = [p for p in patches if not p["why"].startswith("latch:%06x" % (s + 10))]
     # cold reset: the 1008-cycle delay loop (6 bytes, interrupts masked) -> "jsr hle_reset",
     # which does what the ARM does at power-on in exactly that time
     rs = int(cfg["reset_hook"], 16)
-    if prog[rs - base:rs - base + 6] != _Sha1Expect("f9134259607b2c845bc0ee44c8cae44e752c3b55", 6):
-        sys.exit("reset hook site %06x does not match the expected code" % rs)
+    expect(rs, 6, "f9134259607b2c845bc0ee44c8cae44e752c3b55", "reset hook")
     add(rs, jsr(syms["hle_reset"]), "reset:%06x" % rs)
 
     # idle loop: its short branch to the poll loop -> "bra.s <trampoline>", trampoline
@@ -137,8 +125,7 @@ def main():
     o = ih - base
     if prog[o] != 0x60 or ih + 2 + ((prog[o + 1] ^ 0x80) - 0x80) != ir:
         sys.exit("idle hook site does not match")
-    if prog[tr - base:tr - base + 6] != _Sha1Expect("4d0f8270510ddd7c449497c2f86eab4be891804f", 6):
-        sys.exit("idle trampoline site does not match")
+    expect(tr, 6, "4d0f8270510ddd7c449497c2f86eab4be891804f", "idle trampoline")
     disp = tr - (ih + 2)
     add(ih, bytes([0x60, disp & 0xff]), "idle:%06x" % ih)
     add(tr, jmp(syms["hle_idle"]), "idletramp:%06x" % tr)

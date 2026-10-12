@@ -96,6 +96,8 @@ def main():
     hle = open(hle_path, "rb").read()
     H = lambda k: int(cfg[k], 16)
 
+    if "sha1" not in cfg["source_files"]["program"]:
+        die("target.json: the program needs a sha1 (patches carry no original bytes to check)")
     src = read_source(a.source, cfg)
     internal = src["arm_internal"]
     ext = decrypt_external(src["arm_external"], internal)
