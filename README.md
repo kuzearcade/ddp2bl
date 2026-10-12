@@ -245,7 +245,6 @@ MAME ignores SIGTERM/SIGINT under the harness, so stop it with `kill -9 <pid>`. 
 * `harness/`: MAME harness (`run.py` and Lua), Musashi bench, tests, recorded inputs.
 * `mame/`: MAME patch (`ddp2bl` driver and analysis instrumentation).
 * `mister/`: MiSTer MRA.
-* `cfg/`: MAME configs for `ddp2` and `ddp2bl`.
 * `docs/`:
   * `protocol.md`: IGS027A commands;
   * `timing.md`: cycle model;

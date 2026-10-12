@@ -8,7 +8,14 @@ harness/m68k/libm68r.so
 harness/m68k/m68kops.[ch]
 harness/m68k/m68kmake
 oracle/libestmodel.so
+# folders MAME writes when run from the repository (the harness uses its own temp dirs)
 snap/
+cfg/
+nvram/
+inp/
+sta/
+diff/
+memcard/
 # hle/build: only the assembled 68000 code is committed (tools/ddp2bl_build.py needs it);
 # the include, job code and listing are make intermediates
 hle/build/*
