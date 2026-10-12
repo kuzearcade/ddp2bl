@@ -51,14 +51,13 @@ checksum (the game still runs).
 
 ### Expected checksums
 
-With the default region (World), every file in `ddp2bl.zip` must match these. The images
-`--images` writes are the same files, except `ddp2bl_p1.27c322`: there the program fills
-both 2 MB halves of the EPROM instead of only the first, so either half works (checksums
-in the second table).
+With the default region (World), every file in `ddp2bl.zip`, and every image `--images`
+writes, must match these. `ddp2bl_p1.27c322` holds the 2 MB program in both halves, so
+either half of the EPROM works.
 
 | File | Size | CRC32 | SHA1 |
 |---|---|---|---|
-| `ddp2bl_p1.27c322` | 4 MB | `ce18c4a3` | `26f5c0bec8ac294f98297055a919c6b9b93778bf` |
+| `ddp2bl_p1.27c322` | 4 MB | `8d7e0630` | `7072ef71ad5828b6bffa256d0c2b53d81c4a5a5f` |
 | `ddp2bl_t1.27c322` | 4 MB | `e6637091` | `c8f2f8b34a29df6ed93a27a93057fe0c35dc86f5` |
 | `ddp2bl_t2.27c322` | 4 MB | `0024c0e4` | `f521dfa54f5ff2142638adfbbb1b3b516296a3a8` |
 | `ddp2bl_a1.27c322` | 4 MB | `ad79e511` | `e0d62154f387f1e62344b1fdf1d096b86f371ffc` |
@@ -71,14 +70,14 @@ in the second table).
 
 `ddp2bl_p1.27c322` per region (`--region` changes only this file):
 
-| Region | In the zip: CRC32 | SHA1 | EPROM image (`--images`): CRC32 | SHA1 |
-|---|---|---|---|---|
-| `china` | `2f908621` | `a0dcd25aa41b713046961eaee54718508ebcf163` | `d7e47a8d` | `1ab97ef24153f7db41716372f7cd6c2a7d6ca932` |
-| `taiwan` | `ac686e34` | `d8fe8085fb2b0dd099b7e416a5dab659aaaebdc8` | `1ea9357e` | `6d8a8d68d6fa886a938970f6f7e4462767141ccc` |
-| `japan` | `f310504a` | `8572a536e0b936a7c4e414a4a58e5511e4acb93f` | `9e0fe32a` | `751ef03f272079b8d2f9ca0c63395fc6f37a9f25` |
-| `korea` | `70e8b85f` | `5bbe1aa7fe78b5f269d7a7ee0bc4b5d287f21e7c` | `5742acd9` | `60adfe990e4121770601dd59bdc0ba7f2b189984` |
-| `hongkong` | `4de02cb6` | `2562badded93ec45323549ff5feb2e805c64eddc` | `443349c3` | `60c1594831be82760bb9c1edfcb0d6da18898869` |
-| `world` (default) | `ce18c4a3` | `26f5c0bec8ac294f98297055a919c6b9b93778bf` | `8d7e0630` | `7072ef71ad5828b6bffa256d0c2b53d81c4a5a5f` |
+| Region | CRC32 | SHA1 |
+|---|---|---|
+| `china` | `d7e47a8d` | `1ab97ef24153f7db41716372f7cd6c2a7d6ca932` |
+| `taiwan` | `1ea9357e` | `6d8a8d68d6fa886a938970f6f7e4462767141ccc` |
+| `japan` | `9e0fe32a` | `751ef03f272079b8d2f9ca0c63395fc6f37a9f25` |
+| `korea` | `5742acd9` | `60adfe990e4121770601dd59bdc0ba7f2b189984` |
+| `hongkong` | `443349c3` | `60c1594831be82760bb9c1edfcb0d6da18898869` |
+| `world` (default) | `8d7e0630` | `7072ef71ad5828b6bffa256d0c2b53d81c4a5a5f` |
 
 The builder prints these for each build. Compare the files, not the zip itself: the
 zip's own bytes depend on the compression library and can differ between systems.
