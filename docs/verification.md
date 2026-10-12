@@ -79,7 +79,7 @@ Timing margin of the conversion over all gameplay frames of the three sessions: 
 Job cycle accounting in MAME: measured - accounted constant (38 cycles of probe overhead)
 for every job not hit by an interrupt.
 
-## Full game, start to ending (`harness/fullgame.sh`)
+## Full game, start to ending, one player (`harness/fullgame.sh 1p`)
 
 One player plays the whole game: the aiming bot with lives and invulnerability cheats,
 recorded on the protected set (`harness/inputs/fullgame_1p.txt.gz`), 145,900 video frames
@@ -120,3 +120,45 @@ logical frame 90,204, the final boss: the original is in slowdown there and the 
 the game dropped one update; the pictures differed from then on (same stages, different
 scores). The job was made faster (state-2 bullet fast path, packer dispatch, update loop
 counter, free-slot search; outputs unchanged): 122,288 cycles on that frame.
+
+## Full game, two players at maximum load (`harness/fullgame.sh 2p`)
+
+Two players, both firing the shot on autofire for the whole game and dropping a bomb
+whenever one is in stock (bot style `max`, different seed and inputs from every other
+session; lives held at the starting count and invulnerability for both,
+`harness/inputs/fullgame_2p.txt.gz`). 81,200 video frames: all stages, the last boss
+(defeated ~74,200), the ending (~74,800-75,400), name entry for both players and the start
+of a new game.
+
+| check | result |
+|---|---|
+| rendered pixels, palette, video registers | identical in all 81,201 video frames |
+| screenshots (every 1,000 frames) | 82 of 82 identical |
+| VRAM | 4,096 frames differ: the known blank-tile attribute words (game bug at `$13F4C6`, values 6/7), no pixel differs |
+| sound commands | identical; in 16 logical frames only the number of Z80 handshake polls differs (below) |
+| lag pattern | identical except 4 logical frames whose start moves across MAME's frame-number change (below) |
+| game-logic RAM | identical except 62 logical frames: 3-5 bytes of stale stack at `$81FF7C-$81FF85` (frames 55-85 and 75,147-75,177) |
+| protocol stream vs the 68000 replacement | 384,999 of 385,000 shared-window states identical (the last command is cut off by the end of the capture); no ARM busy answer |
+| job cycle accounting in MAME (probe) | measured - accounted = 38 for all 77,527 jobs no interrupt hit |
+| timing margin | 0 late frames; worst 18,391 cycles (debt/slack 0.88) |
+
+**Z80 handshake.** Before some sound commands the game waits for the sound CPU: it writes
+`$F1` to the third latch and reads the Z80's answer until it is ready (`$175976-$1759AE`).
+How long that takes depends on what the Z80 is doing at that moment, and the Z80 gets the
+frame's later sound commands a few thousand cycles later in the converted set (docs/timing.md),
+so these waits differ: from 1 poll to 371 (about 56,000 cycles) in the frames listed. The real sound
+commands are the same, in the same order and the same logical frames. When such a wait
+moves the start of a logical frame past scanline 0 (where MAME's frame number changes,
+~51,000 cycles after the vblank interrupt), the harness records the start one video frame
+later; in all 4 cases the next logical frame starts in the same video frame in both sets and
+no displayed frame differs.
+
+**Cheat fix found by this test.** The first attempt stopped at frame ~33,900 in the
+*original* set with the game's own assertion `cplayer.c 250: p->cntLife <= RV_DEBUTLIFE`:
+player 2 collected an extend while the lives cheat held 3 lives, then died. Player 2 could
+die because `invuln_p2` used a wrong object offset (`0x114`; player 2's object is `0x192`
+after player 1's), so it wrote into an unrelated field of player 2's object every frame
+and did not protect player 2. New cheats `lives3_p1/p2` (lives held at the starting count
+`$803808`) and `invuln2_p2` fix this; the old ones are kept unchanged so that the earlier
+sessions replay exactly (the L2p session above ran both sets with the wrong address, which is
+a valid comparison but did not make player 2 invulnerable).

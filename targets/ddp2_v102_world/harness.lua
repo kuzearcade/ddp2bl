@@ -34,11 +34,30 @@ local function pin_invuln(base, lives)
   end
 end
 
+-- Player 2's object is P2_OFS_OBJ2 after player 1's (code at $16F18E and the object
+-- layout); P2_OFS_OBJ (0x114) was a wrong guess: invuln_p2 writes into the middle of
+-- player 2's object and does not protect player 2. It is kept unchanged so that the
+-- recorded sessions that used it replay exactly.
+local P2_OFS_OBJ2 = 0x192
+local DEBUT_LIFE = 0x803808 -- byte: starting lives; the game asserts cntLife <= it on a miss
+
+-- lives3: lives held at the starting count (extends are taken back), so the game's
+-- assertion "p->cntLife <= RV_DEBUTLIFE" (cplayer.c) can never fire
+local function hold_lives(base)
+  return function(space, frame)
+    local v, d = space:read_u8(base), space:read_u8(DEBUT_LIFE)
+    if v > 0 and v ~= d then space:write_u8(base, d) end
+  end
+end
+
 T.cheats = {
-  lives_p1  = pin_lives(P1_LIVES),
-  lives_p2  = pin_lives(P1_LIVES + P2_OFS_LIVES),
-  invuln_p1 = pin_invuln(P1_INVTIME, P1_LIVES),
-  invuln_p2 = pin_invuln(P1_INVTIME + P2_OFS_OBJ, P1_LIVES + P2_OFS_LIVES),
+  lives_p1   = pin_lives(P1_LIVES),
+  lives_p2   = pin_lives(P1_LIVES + P2_OFS_LIVES),
+  invuln_p1  = pin_invuln(P1_INVTIME, P1_LIVES),
+  invuln_p2  = pin_invuln(P1_INVTIME + P2_OFS_OBJ, P1_LIVES + P2_OFS_LIVES),  -- wrong address, see above
+  lives3_p1  = hold_lives(P1_LIVES),
+  lives3_p2  = hold_lives(P1_LIVES + P2_OFS_LIVES),
+  invuln2_p2 = pin_invuln(P1_INVTIME + P2_OFS_OBJ2, P1_LIVES + P2_OFS_LIVES),
 }
 
 -- Game-state agnostic random bot. Returns active-low words for P1P2, P3P4, Service.
@@ -60,13 +79,13 @@ function T.make_bot(space, rand)
       local s, sh = pl[p], (p - 1) * 8
       local bits = 0
       if frame % 120 >= 60 + p * 4 and frame % 120 < 63 + p * 4 then bits = bits | 0x01 end -- start / continue
-      if style == "aim" and space:read_u8(P1_LIVES + (p - 1) * P2_OFS_LIVES) > 0 then
+      if (style == "aim" or style == "max") and space:read_u8(P1_LIVES + (p - 1) * P2_OFS_LIVES) > 0 then
         -- steer to the screen's centre column, a fixed distance from the bottom, with jitter
-        local obj = 0x812566 + (p - 1) * P2_OFS_OBJ
+        local obj = 0x812566 + (p - 1) * (style == "max" and P2_OFS_OBJ2 or P2_OFS_OBJ)
         local u = space:read_i16(obj)        -- up/down axis   (32..191, centre ~112)
         local v = space:read_i16(obj + 2)    -- left/right axis
         local tu = 112 + ((frame // 97) % 5 - 2) * 12
-        local tv = 85 + ((frame // 131) % 3) * 15
+        local tv = 85 + ((frame // 131) % 3) * 15 + (style == "max" and (p - 1) * 50 or 0)
         if u < tu - 4 then bits = bits | 0x02 elseif u > tu + 4 then bits = bits | 0x04 end
         if v < tv - 4 then bits = bits | 0x10 elseif v > tv + 4 then bits = bits | 0x08 end
         s.fire_hold = true
@@ -75,11 +94,19 @@ function T.make_bot(space, rand)
         s.dir_left = s.dir_left - 1
         bits = bits | s.dir
       end
-      if s.fire_left <= 0 then s.fire_hold = (rand() % 4) ~= 0; s.fire_left = 10 + rand() % 120 end
-      s.fire_left = s.fire_left - 1
-      if s.fire_hold or (frame % 6) < 3 then bits = bits | 0x20 end         -- hold = laser, tap = shot
-      if rand() % 900 == 0 then bits = bits | 0x40 end                      -- bomb, rarely
-      if rand() % 3000 == 0 then bits = bits | 0x80 end                     -- button 3
+      if style == "max" then
+        -- maximum screen load: shot on autofire all the time (2 frames pressed, 2 released),
+        -- bomb pressed every ~1.5 s (each player in its own phase), so every bomb in stock
+        -- is used as soon as the previous one is over
+        if (frame % 4) < 2 then bits = bits | 0x20 end
+        if (frame + p * 45) % 90 < 4 then bits = bits | 0x40 end
+      else
+        if s.fire_left <= 0 then s.fire_hold = (rand() % 4) ~= 0; s.fire_left = 10 + rand() % 120 end
+        s.fire_left = s.fire_left - 1
+        if s.fire_hold or (frame % 6) < 3 then bits = bits | 0x20 end       -- hold = laser, tap = shot
+        if rand() % 900 == 0 then bits = bits | 0x40 end                    -- bomb, rarely
+        if rand() % 3000 == 0 then bits = bits | 0x80 end                   -- button 3
+      end
       p12 = p12 & ~(bits << sh)
     end
     return p12, 0xffff, svc

@@ -137,7 +137,7 @@ def main():
     ap.add_argument("--inputs", help="replay: input log to play back")
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--players", type=int, default=1)
-    ap.add_argument("--style", default="random", choices=("random", "aim"))
+    ap.add_argument("--style", default="random", choices=("random", "aim", "max"))
     ap.add_argument("--cheats", default="")
     ap.add_argument("--frames", type=int, required=True)
     ap.add_argument("--out", required=True)
