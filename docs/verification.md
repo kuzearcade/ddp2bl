@@ -162,3 +162,54 @@ and did not protect player 2. New cheats `lives3_p1/p2` (lives held at the start
 `$803808`) and `invuln2_p2` fix this; the old ones are kept unchanged so that the earlier
 sessions replay exactly (the L2p session above ran both sets with the wrong address, which is
 a valid comparison but did not make player 2 invulnerable).
+
+## Full games without cheats, continuing to the ending (`harness/fullgame.sh nc1p|nc2p`)
+
+The bot continues after every game over (coins every 300 frames; while a player has no
+lives left it presses only start, so the continue countdown is never shortened by the
+fire buttons).
+
+**One player** (`nc1p`, aiming bot, 106,000 frames, all stages with continues, the ending
+"THE END ..?" ~101,000, name entry 160,672,349, a new game):
+
+| check | result |
+|---|---|
+| pixels, VRAM, palette, video registers | identical in all 106,001 frames |
+| game-logic RAM, sound commands, lag pattern | identical (105,361 logical frames) |
+| screenshots | 107 of 107 identical |
+| protocol stream vs the replacement | 499,999 of 500,000 (last command cut off) |
+| job accounting in MAME | 38 for all 93,322 jobs no interrupt hit |
+| timing margin | 0 late frames, worst 24,865 cycles |
+
+**Two players** (`nc2p`, autofire + bombs, 89,000 frames, ending ~76,000): identical up to
+logical frame 9,641, then the games differ (both still reach the ending). Protocol stream
+419,999 of 420,000 identical; job accounting exact.
+
+Cause: at video frame 10,264 the vblank handler's Z80 handshake (`$175976`: `$F1` to latch 3,
+poll `$C00004` until the Z80 is ready) found the protected set's Z80 busy for ~217,000
+cycles, the converted set's Z80 not at all. That delayed the original's frame start by
+two thirds of a frame, so two logical frames started within one video frame and the
+per-frame inputs (read in the vblank handler, identical in both) were consumed in a
+different pattern; with the autofire bot that changed when a shot was fired. The Z80's
+state had drifted apart long before (Z80 RAM differs from frame ~740 in every run): the
+vblank handler's latch writes land a few to a few dozen cycles differently when the
+interrupt arrives in different instructions (slowdown frames, where the converted game's
+post-cmd-14 code is shifted by the job; the idle-loop phase residuals), and the Z80
+amplifies that.
+
+**The protected set is not stable against this either.** The PGM's 68000 (20 MHz crystal)
+and Z80 (33.8688 MHz crystal) are clocked independently, so a real board never reproduces
+one exact 68000/Z80 phase. The protected set replayed with the Z80 clock off by +30 or -30
+ppm (normal crystal tolerance; MAME `DDP2_Z80_PPM`, 30,000 frames):
+
+| comparison | first differing logical frame |
+|---|---|
+| original vs original, Z80 0 ppm (control) | none |
+| original vs original, Z80 +30 ppm | 9,642 (the same stall) |
+| original vs original, Z80 -30 ppm | 9,642 |
+| converted vs original +30 ppm | ~25,368 |
+| converted vs original -30 ppm | ~12,380 |
+
+So this divergence is a property of the game's 68000/Z80 handshake at one exact clock
+phase, not something the conversion can or should reproduce: an original board would not
+reproduce it from one power-on to the next.

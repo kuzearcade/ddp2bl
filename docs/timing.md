@@ -140,8 +140,11 @@ update there (the original would not).
   ready (`$175976`). Since the Z80 sees those commands at a different sub-frame time, its
   busy periods fall differently and the wait can differ by up to ~56,000 cycles in a frame
   (two-player full game: 16 logical frames). Commands, order and frames are unchanged, and
-  no frame was lost or gained in the runs; a wait like this close to the vblank could in
-  principle move a frame.
+  no frame was lost or gained in the 1p/2p cheat runs. In the two-player no-cheat run one
+  such stall (~217,000 cycles, in the original only) changed how inputs were assigned to
+  logical frames and the games diverged; the original diverges the same way from itself
+  when its Z80 is detuned by 30 ppm (docs/verification.md), i.e. on real hardware, where the
+  Z80 has its own crystal, this is not reproducible anyway.
 * **Idle-loop phase**: the phase lock repays the job exactly, but the original's own phase
   also depends on things a 68000 cannot know: the ARM's reply jitter (±1 poll in 0.6% of
   cmd 14 sends) and how long IRQ4's acknowledge takes when it lands in different code. A

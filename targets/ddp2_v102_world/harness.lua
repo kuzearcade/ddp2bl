@@ -79,6 +79,13 @@ function T.make_bot(space, rand)
       local s, sh = pl[p], (p - 1) * 8
       local bits = 0
       if frame % 120 >= 60 + p * 4 and frame % 120 < 63 + p * 4 then bits = bits | 0x01 end -- start / continue
+      local out = space:read_u8(P1_LIVES + (p - 1) * P2_OFS_LIVES) == 0
+      if out and os.getenv("DDP2H_BOT_CONTINUE") == "1" then
+        -- not in the game (game over, continue screen, not joined yet): only start, every
+        -- half second (fire buttons shorten the continue countdown)
+        if frame % 30 < 3 then p12 = p12 & ~(0x01 << sh) end
+        goto next_player
+      end
       if (style == "aim" or style == "max") and space:read_u8(P1_LIVES + (p - 1) * P2_OFS_LIVES) > 0 then
         -- steer to the screen's centre column, a fixed distance from the bottom, with jitter
         local obj = 0x812566 + (p - 1) * (style == "max" and P2_OFS_OBJ2 or P2_OFS_OBJ)
@@ -108,6 +115,7 @@ function T.make_bot(space, rand)
         if rand() % 3000 == 0 then bits = bits | 0x80 end                   -- button 3
       end
       p12 = p12 & ~(bits << sh)
+      ::next_player::
     end
     return p12, 0xffff, svc
   end
