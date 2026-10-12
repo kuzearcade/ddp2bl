@@ -8,7 +8,9 @@ Standard library only. Every input file is checked against known hashes (the pro
 SHA1, before it is patched), and the output hashes are printed.
 
 Output set (4MB, 27C322-sized images):
-  ddp2bl_p1.27c322           patched program (first 2MB; the second 2MB is empty)
+  ddp2bl_p1.27c322           patched program (first 2MB; in the zip the second 2MB is
+                             empty, as MAME's ddp2bl expects; the --images file has the
+                             program in both halves, so either half of the EPROM works)
   ddp2bl_t1/t2.27c322        tile ROM halves
   ddp2bl_a1..a4.27c322       sprite colour ROM quarters
   ddp2bl_b1/b2.27c322        sprite mask ROM halves
@@ -163,6 +165,7 @@ def main():
         prog[o:o + len(new)] = new
 
     p1 = hswap(bytes(prog)) + bytes(0x400000 - len(prog))   # bank 1 empty (zero, like MAME's region)
+    p1_eprom = hswap(bytes(prog)) * (0x400000 // len(prog))   # EPROM image: program in both halves
 
     # ---- graphics / sound: split to 27C322 sized images
     t, a1, a2, b, m = src["tiles"], src["sprcol0"], src["sprcol1"], src["sprmask"], src["samples"]
@@ -178,13 +181,17 @@ def main():
     with zipfile.ZipFile(a.output, "w", zipfile.ZIP_DEFLATED) as z:
         for name, data in out:
             z.writestr(zipfile.ZipInfo(name, (1996, 12, 24, 23, 32, 0)), data)
-    if a.images:
-        os.makedirs(a.images, exist_ok=True)
-        for name, data in out:
-            open(os.path.join(a.images, name), "wb").write(data)
     print("wrote %s (%d patches, %d bytes of 68000 code), region %s" % (a.output, len(patches), len(hle), region))
     for name, data in out:
         print("  %-20s %7x CRC(%s) SHA1(%s)" % (name, len(data), crc(data), sha1(data)))
+    if a.images:
+        os.makedirs(a.images, exist_ok=True)
+        images = [(n, p1_eprom if n == "ddp2bl_p1.27c322" else d) for n, d in out]
+        for name, data in images:
+            open(os.path.join(a.images, name), "wb").write(data)
+        print("wrote the EPROM images to %s; they are the zip's files except:" % a.images)
+        print("  %-20s %7x CRC(%s) SHA1(%s)  (program in both halves)" % (
+            "ddp2bl_p1.27c322", len(p1_eprom), crc(p1_eprom), sha1(p1_eprom)))
 
 
 if __name__ == "__main__":

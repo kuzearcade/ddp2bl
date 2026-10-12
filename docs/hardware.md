@@ -17,7 +17,7 @@ The region defaults to World; `--region` selects another (see the README).
 
 | File | Content |
 |---|---|
-| `ddp2bl_p1.27c322` | patched program in the first 2MB (MAME's byte order); the second 2MB is empty |
+| `ddp2bl_p1.27c322` | patched program (MAME's byte order) in both 2MB halves, so either half of the EPROM works; in `ddp2bl.zip` only the first half holds it (the second is empty, as MAME's `ddp2bl` expects) |
 | `ddp2bl_t1.27c322`, `ddp2bl_t2.27c322` | tiles: first and second half of `pgm_t1300.u21` |
 | `ddp2bl_a1..a4.27c322` | sprite colour: `pgm_a1300` halves, then `pgm_a1301` halves |
 | `ddp2bl_b1.27c322`, `ddp2bl_b2.27c322` | sprite masks: `pgm_b1300` halves |
