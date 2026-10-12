@@ -13,6 +13,8 @@ Patch kinds
             (absolute-long operands and immediates; same length, same cycles)
   latch   : the sequence-byte write to the latch (10 bytes) -> "jsr hle_latch_write" + 2 nops
   reset   : the cold-reset delay loop -> "jsr hle_reset" (ARM power-on state, same cycles)
+  region  : the immediate in hle_reset that receives the region word; no bytes here, the
+            builder reads the word from the ARM internal ROM ({"arm_word": offset})
 Only code below code_end is scanned; every hit must be an operand of a decoded
 instruction (never the opcode word), which the disassembly provides.
 """
@@ -118,6 +120,9 @@ def main():
     rs = int(cfg["reset_hook"], 16)
     expect(rs, 6, "f9134259607b2c845bc0ee44c8cae44e752c3b55", "reset hook")
     add(rs, jsr(syms["hle_reset"]), "reset:%06x" % rs)
+    # hle_reset's first instruction, "move.l #<region word>,SHWIN", is assembled with 0
+    patches.append({"addr": syms["hle_reset"] + 2, "arm_word": cfg["region_word_offset"], "why": "region"})
+    kinds["region"] = 1
 
     # idle loop: its short branch to the poll loop -> "bra.s <trampoline>", trampoline
     # (unreachable error path of the idle-callback registration) -> "jmp hle_idle"
@@ -132,16 +137,6 @@ def main():
 
     for s in latch_sites:
         add(s, jsr(syms["hle_latch_write"]) + nop + nop, "latch:%06x" % s)
-    # region word: the immediate of the HLE's "move.l #0,SHWIN", filled in by the builder
-    # from the ARM internal ROM (no ROM data in the repository)
-    for line in open(a.listing):
-        m = re.match(r"^00:([0-9A-F]{8}) 23FC00000000\S*\s.*region word", line)
-        if m:
-            patches.append({"addr": int(m.group(1), 16) + 2, "arm_word": cfg["region_word_offset"], "why": "region"})
-            kinds["region"] = 1
-            break
-    else:
-        sys.exit("region word site not found in the listing")
     patches.sort(key=lambda p: p["addr"])
     for x, y in zip(patches, patches[1:]):
         if x["addr"] + len(x.get("new", "00" * 4)) // 2 > y["addr"]:

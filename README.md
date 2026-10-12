@@ -54,7 +54,7 @@ The commands below assume the layout used during development:
 | `~/DDP2_Repair/mame-ddp2bl` | MAME tree with `mame/ddp2bl.patch` applied |
 
 Other locations work by overriding the paths:
-* `make TOOLS=... ARM=... PROG=...` for the build;
+* `make TOOLS=... PROG=...` for the build;
 * `make -C harness/m68k MUSASHI=...` for the bench;
 * `--mame` and `--rompath` for `harness/run.py`.
 
@@ -116,7 +116,7 @@ The harness ROM path `work/roms/` must hold `pgm.zip`, `ddp2.zip` and the built 
 * `work/prog/v102.be.bin`: `v102.u8` from `ddp2.zip`, byte-swapped to 68000 (big-endian) order.
 * `work/prog/v102.dasm`: its disassembly, made with MAME's `unidasm`.
 * `work/arm/internal.bin`: the IGS027A's internal ROM, which is `ddp2_igs027a_world.bin`
-  from `ddp2.zip`.
+  from `ddp2.zip` (used by the test tools; the build itself reads it from `ddp2.zip`).
 
 To create all three:
 

@@ -100,10 +100,10 @@ O_OY		equ	$42
 
 ; ---------------------------------------------------------------------------
 ; hle_send
-; Entered by "jmp" from the game's send(cmd) in place of
-;     its command load, command-word store and latch post   (the send hook)
-; with 10(a6) = command word. Times below count from the start of the original's
-; command-word store (our jmp starts at -16). In the reference (protected set,
+; Entered by "jmp" from the game's send(cmd) in place of its three instructions that
+; load the command, store it to the command word and post the sequence byte to the
+; latch (the send hook), with 10(a6) = command word. Times below count from the start
+; of the original's command-word store (our jmp starts at -16). In the reference (protected set,
 ; per-cycle interleave) the ARM replies D cycles after the latch write; the 68k polls
 ; first after FIRST_POLL cycles and then every 94, so it reaches SEND_EXIT after
 ;     266 + E*94 cycles,   E = extra polls = ceil((D - 146) / 94)

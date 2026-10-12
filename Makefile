@@ -2,7 +2,6 @@
 # End users only need tools/ddp2bl_build.py (it uses the committed hle/build/*.bin).
 TARGET  ?= ddp2_v102_world
 TOOLS   ?= $(HOME)/DDP2_Repair/toolchain/bin
-ARM     ?= work/arm
 PROG    ?= work/prog
 BUILD   := hle/build
 VASM    := $(TOOLS)/vasmm68k_mot -quiet -Fbin -m68000 -no-opt
@@ -11,7 +10,7 @@ all: $(BUILD)/$(TARGET).bin targets/$(TARGET)/patches.json
 
 $(BUILD)/$(TARGET).inc: targets/$(TARGET)/target.json tools/gen_target_inc.py
 	@mkdir -p $(BUILD)
-	python3 tools/gen_target_inc.py $(TARGET) $(ARM)/internal.bin $@
+	python3 tools/gen_target_inc.py $(TARGET) $@
 
 $(BUILD)/job_acc.s: $(BUILD)/$(TARGET).inc hle/job.s hle/est_engine.s hle/est_spawn.s hle/est_results.s hle/hle.s tools/cycacc.py
 	python3 tools/cycacc.py hle/job.s $@ --symbols $(BUILD)/$(TARGET).inc --symbols hle/hle.s --report --entry hle_run_job --entry cmd_11 --entry cmd_12 --entry cmd_13 --entry est_results --entry irq_saved

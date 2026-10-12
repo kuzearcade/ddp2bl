@@ -3,11 +3,10 @@
 import json
 import math
 import os
-import struct
 import sys
 
 
-def main(target, arm_internal, out):
+def main(target, out):
     cfg = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "targets", target, "target.json")))
     h = lambda k: "$%X" % int(cfg[k], 16)
     ext = int(cfg["rom_extrom"], 16)
@@ -112,4 +111,4 @@ def main(target, arm_internal, out):
 
 
 if __name__ == "__main__":
-    main(*sys.argv[1:4])
+    main(*sys.argv[1:3])
