@@ -213,3 +213,13 @@ ppm (normal crystal tolerance; MAME `DDP2_Z80_PPM`, 30,000 frames):
 So this divergence is a property of the game's 68000/Z80 handshake at one exact clock
 phase, not something the conversion can or should reproduce: an original board would not
 reproduce it from one power-on to the next.
+
+## Current build (debris frame speed-up) — regression
+
+| session | result |
+|---|---|
+| 1p full game (cheats), 145,900 frames | unchanged: every frame displays identically; sequence byte after the ARM busy answer |
+| nc1p (no cheats), 106,000 frames | identical in every frame (pixels, game logic, sound, lag) |
+| 2p max load (cheats), 81,200 frames | identical up to logical frame 51,156; at video frame 51,783 the converted set's Z80 handshake stalls (1,219 polls, ~186,000 cycles), the original's does not, and the games differ from there (docs/timing.md "68000/Z80 phase") |
+| all 7 captures, protocol stream | identical except the known busy answer; 0 predicted late frames |
+| job accounting in MAME | exact on every job no interrupt hit |

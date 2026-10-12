@@ -112,7 +112,9 @@ reference runs (57,000-58,000 gameplay frames each) and the job cost of every fr
 | L2p (2 players, invulnerable, 60,000 frames) | 53,471 cycles | 0.66 | 0 |
 | Lnc (no cheats, 60,000 frames) | 66,761 cycles | 0.68 | 0 |
 | full game (1 player, 145,900 frames, to the ending) | 11,801 cycles | 0.91 | 0 |
-| full game (2 players, autofire + bombs, 81,200 frames, to the ending) | 18,391 cycles | 0.88 | 0 |
+| full game (2 players, autofire + bombs, 81,200 frames, to the ending) | 26,967 cycles | 0.80 | 0 |
+| full game, no cheats, 1 player (106,000 frames) | 25,905 cycles | 0.77 | 0 |
+| full game, no cheats, 2 players (89,000 frames) | 14,023 cycles | 0.88 | 0 |
 
 The tightest frames are at the final boss: the original game itself is in slowdown there
 (74,040 of 137,537 job frames of the full game are late in the original), so the
@@ -123,7 +125,11 @@ burst; the next one by 5,317 cycles at the final boss (found by the full-game te
 was optimised both times with all outputs unchanged (cycle markers, packer dispatch with
 states 1-3 first, update loop counted with `dbra`, a state-2 fast path for bullets whose
 script instruction is still running, a tighter free-slot search): the final-boss frame went
-from 139,406 to 122,288 cycles.
+from 139,406 to 122,288 cycles. A third pass targeted the frame in which a boss's death turns
+every bullet into falling debris (`sp_todebris`: counters and constants in registers, the
+animation entry computed once per frame change instead of per object, adjacent fields written
+as longs; `st5`'s animation step inline): 165,758 -> 146,726 cycles with 126 bullets (margin
+-217 -> 18,815), 159,026 -> 141,612 with 115.
 
 This margin is a property of the inputs, not a guarantee: in a slowdown frame the time
 left before the next vblank depends on how much the game itself had to do. A scene heavier
@@ -162,3 +168,36 @@ update there (the original would not).
     L2p run 160 background attribute words differ for several thousand frames (`$0003` in the
     original, `$0002` converted); every rendered pixel is identical (the tiles are blank). On the original
     hardware this value depends on the same interrupt timing.
+
+## 68000/Z80 phase (investigated)
+
+The sound CPU sees the same values, in the same order, from both sets, but not always at
+the same cycle. Measured on the two-player max-load session (51,384 frames, MAME, interrupted
+PC of every vblank interrupt; cycle-stamped 68000 traces aligned instruction by instruction):
+
+* The vblank interrupt lands on the same instruction in both sets in only 21% of frames;
+  in-step stretches last up to ~500 frames. In the other frames the converted set's
+  frame starts by tens to a few hundred cycles earlier or later, and so do the vblank
+  handler's sound-latch writes and its writes into Z80 RAM (`$C10006/8`, typically +-10 to
+  +-30 cycles: the interrupt acknowledge is synchronised to the 68000 E clock, 10 cycles).
+* Where an offset starts (the idle-loop phase lock only repays the job; an offset from
+  anything else persists until another one cancels it):
+  - IRQ4 (scanline 0, ~660-cycle handler) inside a `send()` wait: the original's poll
+    loop counts the handler as waiting time and needs fewer polls; the replacement's wait
+    has a fixed length (e.g. frame 990: +90 cycles);
+  - ARM reply jitter mispredicted by one poll (0.05% of cmd 12, 0.6% of cmd 14);
+  - the vblank interrupt arriving while the idle hook is still repaying the job (once in
+    51,384 frames, at the first gameplay frame 617);
+  - once the two Z80s differ, the vblank handler's Z80 handshake takes different numbers
+    of polls, which offsets the 68000 again.
+* These cannot be removed exactly. The original's wait ends when the ARM's latch byte
+  changes; a replacement loop with the same instructions (same interrupt latency) has no
+  way to make a byte change at the right moment (the 68000 has no timer), and a loop that
+  detects IRQ4 and compensates has different instructions, i.e. still 10-cycle offsets. The
+  ARM's jitter depends on ARM-internal time the 68000 cannot see.
+* Effect: occasionally a long Z80 handshake stall (~200,000 cycles) in one set only; in
+  the sessions run so far this changed the game twice (two-player no-cheat session,
+  original stalls; two-player max-load session with the current build, converted set
+  stalls). On a real PGM the Z80 has its own crystal, so this phase is not reproducible
+  either; with the Z80 detuned by +-30 ppm the original diverges from itself in the
+  no-cheat session at the same frame, but stays identical in the max-load session.

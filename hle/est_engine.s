@@ -115,9 +115,10 @@ est_animate:
 ; ---------------------------------------------------------------------------
 anim_down:				; period 3, frames 15..0 (states 5, 7)
 	subq.w	#1,O_ACNT(a0)		; counter at 0: it wraps (carry), reload below
-	bcs.s	.f			; @unlikely
+	bcs.s	anim_down_f		; @unlikely
 	rts
-.f:	move.w	#3,O_ACNT(a0)
+anim_down_f:
+	move.w	#3,O_ACNT(a0)
 	move.w	O_AFRAME(a0),d0
 	move.w	d0,d1
 	subq.w	#1,d1
@@ -765,7 +766,9 @@ st5:
 	add.w	d7,d5
 	move.w	d5,O_Y(a0)
 	SPRXY	d4,d5,O_OX(a0),O_OY(a0),d0
-	bra	anim_down
+	subq.w	#1,O_ACNT(a0)		; anim_down, inline
+	bcs	anim_down_f		; @unlikely
+	rts
 
 ; ---------------------------------------------------------------------------
 ; states 6 / 7: items moving with the background

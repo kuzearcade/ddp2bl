@@ -1,5 +1,5 @@
 Sections:
-00: "org0001:262000" (262000-263E76)
+00: "org0001:262000" (262000-263EB8)
 
 
 Source: "hle/hle.s"
@@ -1705,13 +1705,13 @@ Source: "job_acc.s"
 00:00262854 61000020        	    55: 	bsr	est_start
 00:00262858 3B6D0000001A    	    56: 	move.w	SYS+S_COUNT(a5),SYS+S_LATCHED(a5)
 00:0026285E 6100028A        	    57: 	bsr	est_requests
-00:00262862 6000098C        	    58: 	bra	est_update
+00:00262862 600009C0        	    58: 	bra	est_update
                             	    59: 
                             	    60: cmd_13:
 00:00262866 47EB012C        	    61: 	lea	300(a3),a3		; [cyc] block
 00:0026286A 6100000A        	    62: 	bsr	est_start
 00:0026286E 6100027A        	    63: 	bsr	est_requests
-00:00262872 600009E6        	    64: 	bra	est_animate
+00:00262872 60000A1A        	    64: 	bra	est_animate
                             	    65: 
                             	    66: est_start:
 00:00262876 41EC1F00        	    67: 	lea	$1F00(a4),a0	; header (24 bytes) -> SYS[0..$17]
@@ -1987,13 +1987,13 @@ Source: "job_acc.s"
 00:00262B38 02BC
 00:00262B3A 02E8
 00:00262B3C 0324
-00:00262B3E 0462            	   331: 	dc.w	sp_multidebris-.tab, sp_debris-.tab, sp_falling-.tab, sp_item6-.tab
-00:00262B40 04C8
-00:00262B42 04EE
-00:00262B44 0598
-00:00262B46 05E0            	   332: 	dc.w	sp_item7-.tab, sp_removeitem-.tab, sp_stopbounce-.tab
-00:00262B48 0676
-00:00262B4A 0696
+00:00262B3E 0496            	   331: 	dc.w	sp_multidebris-.tab, sp_debris-.tab, sp_falling-.tab, sp_item6-.tab
+00:00262B40 04FC
+00:00262B42 0522
+00:00262B44 05CC
+00:00262B46 0614            	   332: 	dc.w	sp_item7-.tab, sp_removeitem-.tab, sp_stopbounce-.tab
+00:00262B48 06AA
+00:00262B4A 06CA
                             	   333: 
                             	   334: ; ---------------------------------------------------------------------------
                             	   335: ; helpers
@@ -2289,1426 +2289,1465 @@ Source: "job_acc.s"
                             	   625: 
                             	   626: ; id 7: every scripted bullet becomes falling debris, appearing ones vanish ($1E34)
                             	   627: sp_todebris:
-00:00262E52 47EB00AE        	   628: 	lea	174(a3),a3		; [cyc] block
-00:00262E56 3E2A0002        	   629: 	move.w	2(a2),d7	; type
-00:00262E5A 7400            	   630: 	moveq	#0,d2
-00:00262E5C 3407            	   631: 	move.w	d7,d2
-00:00262E5E E54A            	   632: 	lsl.w	#2,d2
-00:00262E60 43F900287BFC    	   633: 	lea	T_19C4,a1
-00:00262E66 28312000        	   634: 	move.l	(a1,d2.w),d4	; ox:oy
-00:00262E6A 7600            	   635: 	moveq	#0,d3
-00:00262E6C 3607            	   636: 	move.w	d7,d3
-00:00262E6E D643            	   637: 	add.w	d3,d3
-00:00262E70 43F900287C1C    	   638: 	lea	T_19C8,a1
-00:00262E76 3B7130002390    	   639: 	move.w	(a1,d3.w),TMP(a5)	; limit
-00:00262E7C 3407            	   640: 	move.w	d7,d2
-00:00262E7E EB4A            	   641: 	lsl.w	#5,d2
-00:00262E80 06420024        	   642: 	addi.w	#$24,d2	; animation base
-00:00262E84 362D0084        	   643: 	move.w	SYS+S_CNT84(a5),d3
-00:00262E88 0243000F        	   644: 	andi.w	#$f,d3	; current frame
-00:00262E8C 41ED0090        	   645: 	lea	POOL(a5),a0
-00:00262E90 7A7F            	   646: 	moveq	#NOBJ-1,d5
-                            	   647: .l:
-00:00262E92 47EB0210        	   648: 	lea	528(a3),a3		; [cyc] block
-00:00262E96 3010            	   649: 	move.w	(a0),d0
-00:00262E98 0C400002        	   650: 	cmpi.w	#2,d0
-00:00262E9C 67000018        	   651: 	beq	.conv
-00:00262EA0 47EBFE40        	   652: 	lea	-448(a3),a3		; [cyc] fall-through
-00:00262EA4 0C400001        	   653: 	cmpi.w	#1,d0
-00:00262EA8 6600007E        	   654: 	bne	.n
-00:00262EAC 47EB0020        	   655: 	lea	32(a3),a3		; [cyc] fall-through
-00:00262EB0 4250            	   656: 	clr.w	(a0)
-00:00262EB2 60000074        	   657: 	bra	.n
-                            	   658: .conv:
-00:00262EB6 30BC0005        	   659: 	move.w	#5,(a0)
-00:00262EBA 31470002        	   660: 	move.w	d7,O_TYPE(a0)
-00:00262EBE 31430030        	   661: 	move.w	d3,O_AFRAME(a0)
-00:00262EC2 3142002C        	   662: 	move.w	d2,O_ABASE(a0)
-00:00262EC6 322D0082        	   663: 	move.w	SYS+S_CNT82(a5),d1
-00:00262ECA 5241            	   664: 	addq.w	#1,d1
-00:00262ECC 3B410082        	   665: 	move.w	d1,SYS+S_CNT82(a5)
-00:00262ED0 02410003        	   666: 	andi.w	#3,d1
-00:00262ED4 66000018        	   667: 	bne	.anim
-00:00262ED8 47EBFF50        	   668: 	lea	-176(a3),a3		; [cyc] fall-through
-00:00262EDC 362D0084        	   669: 	move.w	SYS+S_CNT84(a5),d3
-00:00262EE0 5243            	   670: 	addq.w	#1,d3
-00:00262EE2 3B430084        	   671: 	move.w	d3,SYS+S_CNT84(a5)
-00:00262EE6 0243000F        	   672: 	andi.w	#$f,d3
-00:00262EEA 60000010        	   673: 	bra	.set
-                            	   674: .anim:
-00:00262EEE 48E76000        	   675: 	movem.l	d1/d2,-(sp)
-00:00262EF2 3003            	   676: 	move.w	d3,d0
-00:00262EF4 6100FDA4        	   677: 	bsr	copy_anim_1800	; uses O_ABASE (= d2) + frame d0
-00:00262EF8 4CDF0006        	   678: 	movem.l	(sp)+,d1/d2
-                            	   679: .set:
-00:00262EFC 31410036        	   680: 	move.w	d1,O_ACNT(a0)
-00:00262F00 3001            	   681: 	move.w	d1,d0
-00:00262F02 ED48            	   682: 	lsl.w	#6,d0
-00:00262F04 04400040        	   683: 	subi.w	#$40,d0
-00:00262F08 31400010        	   684: 	move.w	d0,O_VX(a0)
-00:00262F0C 30280012        	   685: 	move.w	O_VY(a0),d0
-00:00262F10 0240000F        	   686: 	andi.w	#$f,d0
-00:00262F14 5F40            	   687: 	subq.w	#7,d0
-00:00262F16 31400012        	   688: 	move.w	d0,O_VY(a0)
-00:00262F1A 42A80014        	   689: 	clr.l	O_AX(a0)	; AX and AY
-00:00262F1E 21440040        	   690: 	move.l	d4,O_OX(a0)
-00:00262F22 316D2390002E    	   691: 	move.w	TMP(a5),O_FLAG(a0)
-                            	   692: .n:
-00:00262F28 41E80044        	   693: 	lea	OBJ_SIZE(a0),a0
-00:00262F2C 51CDFF64        	   694: 	dbra	d5,.l
-00:00262F30 47EB001C        	   695: 	lea	28(a3),a3		; [cyc] fall-through
-00:00262F34 4E75            	   696: 	rts
-                            	   697: 
-                            	   698: ; debris4_init: a0 = slot, d7 = type, d4 = x:y, d2 = animation base
-                            	   699: debris4_init:
-00:00262F36 30BC0004        	   700: 	move.w	#4,(a0)
-00:00262F3A 31470002        	   701: 	move.w	d7,O_TYPE(a0)
-00:00262F3E 302D0086        	   702: 	move.w	SYS+S_CNT86(a5),d0
-00:00262F42 5240            	   703: 	addq.w	#1,d0
-00:00262F44 3B400086        	   704: 	move.w	d0,SYS+S_CNT86(a5)
-00:00262F48 3200            	   705: 	move.w	d0,d1
-00:00262F4A 02400003        	   706: 	andi.w	#3,d0
-00:00262F4E D040            	   707: 	add.w	d0,d0
-00:00262F50 D040            	   708: 	add.w	d0,d0
-00:00262F52 43F900287BEC    	   709: 	lea	T_172C,a1
-00:00262F58 317100000010    	   710: 	move.w	(a1,d0.w),O_VX(a0)
-00:00262F5E 30310002        	   711: 	move.w	2(a1,d0.w),d0
-00:00262F62 08010000        	   712: 	btst	#0,d1
-00:00262F66 67000008        	   713: 	beq	.e
-00:00262F6A 47EB000E        	   714: 	lea	14(a3),a3		; [cyc] fall-through
-00:00262F6E 4440            	   715: 	neg.w	d0
-                            	   716: .e:
-00:00262F70 31400012        	   717: 	move.w	d0,O_VY(a0)
-00:00262F74 21440006        	   718: 	move.l	d4,O_X(a0)
-00:00262F78 42A80014        	   719: 	clr.l	O_AX(a0)
-00:00262F7C 317C00080032    	   720: 	move.w	#8,O_TIMER(a0)
-00:00262F82 42680030        	   721: 	clr.w	O_AFRAME(a0)
-00:00262F86 3142002C        	   722: 	move.w	d2,O_ABASE(a0)
-00:00262F8A 42680036        	   723: 	clr.w	O_ACNT(a0)
-00:00262F8E 4E75            	   724: 	rts
-                            	   725: 
-                            	   726: ; id 8: REQ6 bouncing debris pieces ($1BB0)
-                            	   727: sp_multidebris:
-00:00262F90 47EB007E        	   728: 	lea	126(a3),a3		; [cyc] block
-00:00262F94 3E2A0002        	   729: 	move.w	2(a2),d7
-00:00262F98 282A0004        	   730: 	move.l	4(a2),d4	; x:y
-00:00262F9C 3407            	   731: 	move.w	d7,d2
-00:00262F9E D442            	   732: 	add.w	d2,d2
-00:00262FA0 D442            	   733: 	add.w	d2,d2
-00:00262FA2 04420010        	   734: 	subi.w	#$10,d2
-00:00262FA6 206D0088        	   735: 	movea.l	SYS+S_SEARCH(a5),a0
-00:00262FAA 3A2A000C        	   736: 	move.w	12(a2),d5
-00:00262FAE 67000040        	   737: 	beq	.done
-00:00262FB2 47EBFFEE        	   738: 	lea	-18(a3),a3		; [cyc] fall-through
-00:00262FB6 5345            	   739: 	subq.w	#1,d5
-                            	   740: .each:
-00:00262FB8 47EB0162        	   741: 	lea	354(a3),a3		; [cyc] block
-00:00262FBC B1FC0081D64C    	   742: 	cmpa.l	#HLEV+POOL+(NOBJ-1)*OBJ_SIZE,a0
-00:00262FC2 6300000A        	   743: 	bls	.c
-00:00262FC6 47EB0012        	   744: 	lea	18(a3),a3		; [cyc] fall-through
-00:00262FCA 41ED0090        	   745: 	lea	POOL(a5),a0
-                            	   746: .c:
-00:00262FCE 4A50            	   747: 	tst.w	(a0)
-00:00262FD0 6700000E        	   748: 	beq	.f
-00:00262FD4 47EBFEEC        	   749: 	lea	-276(a3),a3		; [cyc] fall-through
-00:00262FD8 41E80044        	   750: 	lea	OBJ_SIZE(a0),a0
-00:00262FDC 6000FFDA        	   751: 	bra	.each
-                            	   752: .f:
-00:00262FE0 6100FF54        	   753: 	bsr	debris4_init
-00:00262FE4 41E80044        	   754: 	lea	OBJ_SIZE(a0),a0
-00:00262FE8 51CDFFCE        	   755: 	dbra	d5,.each
-00:00262FEC 47EB002C        	   756: 	lea	44(a3),a3		; [cyc] fall-through
-                            	   757: .done:
-00:00262FF0 2B480088        	   758: 	move.l	a0,SYS+S_SEARCH(a5)
-00:00262FF4 4E75            	   759: 	rts
-                            	   760: 
-                            	   761: ; id 9: one bouncing debris piece ($1AE8)
-                            	   762: sp_debris:
-00:00262FF6 47EB01B4        	   763: 	lea	436(a3),a3		; [cyc] block
-00:00262FFA 6100FB50        	   764: 	bsr	find_free
-00:00262FFE 3E2A0002        	   765: 	move.w	2(a2),d7
-00:00263002 282A0004        	   766: 	move.l	4(a2),d4
-00:00263006 3407            	   767: 	move.w	d7,d2
-00:00263008 5942            	   768: 	subq.w	#4,d2
-00:0026300A D442            	   769: 	add.w	d2,d2
-00:0026300C D442            	   770: 	add.w	d2,d2
-00:0026300E 6100FF26        	   771: 	bsr	debris4_init
-00:00263012 43E80044        	   772: 	lea	OBJ_SIZE(a0),a1
-00:00263016 2B490088        	   773: 	move.l	a1,SYS+S_SEARCH(a5)
-00:0026301A 4E75            	   774: 	rts
-                            	   775: 
-                            	   776: ; id 10: falling debris ($189C)
-                            	   777: sp_falling:
-00:0026301C 47EB02C2        	   778: 	lea	706(a3),a3		; [cyc] block
-00:00263020 6100FB2A        	   779: 	bsr	find_free
-00:00263024 30BC0005        	   780: 	move.w	#5,(a0)
-00:00263028 3E2A0002        	   781: 	move.w	2(a2),d7
-00:0026302C 31470002        	   782: 	move.w	d7,O_TYPE(a0)
-00:00263030 362D0084        	   783: 	move.w	SYS+S_CNT84(a5),d3
-00:00263034 0243000F        	   784: 	andi.w	#$f,d3
-00:00263038 31430030        	   785: 	move.w	d3,O_AFRAME(a0)
-00:0026303C 3407            	   786: 	move.w	d7,d2
-00:0026303E EB4A            	   787: 	lsl.w	#5,d2
-00:00263040 06420024        	   788: 	addi.w	#$24,d2
-00:00263044 3142002C        	   789: 	move.w	d2,O_ABASE(a0)
-00:00263048 322D0082        	   790: 	move.w	SYS+S_CNT82(a5),d1
-00:0026304C 5241            	   791: 	addq.w	#1,d1
-00:0026304E 3B410082        	   792: 	move.w	d1,SYS+S_CNT82(a5)
-00:00263052 02410003        	   793: 	andi.w	#3,d1
-00:00263056 6600000E        	   794: 	bne	.anim
-00:0026305A 47EBFF58        	   795: 	lea	-168(a3),a3		; [cyc] fall-through
-00:0026305E 526D0084        	   796: 	addq.w	#1,SYS+S_CNT84(a5)
-00:00263062 6000000C        	   797: 	bra	.set
-                            	   798: .anim:
-00:00263066 3003            	   799: 	move.w	d3,d0
-00:00263068 3F01            	   800: 	move.w	d1,-(sp)
-00:0026306A 6100FC2E        	   801: 	bsr	copy_anim_1800
-00:0026306E 321F            	   802: 	move.w	(sp)+,d1
-                            	   803: .set:
-00:00263070 216A00040006    	   804: 	move.l	4(a2),O_X(a0)
-00:00263076 3001            	   805: 	move.w	d1,d0
-00:00263078 ED48            	   806: 	lsl.w	#6,d0
-00:0026307A 04400040        	   807: 	subi.w	#$40,d0
-00:0026307E 31400010        	   808: 	move.w	d0,O_VX(a0)
-00:00263082 30280012        	   809: 	move.w	O_VY(a0),d0
-00:00263086 0240003F        	   810: 	andi.w	#$3f,d0
-00:0026308A 0440001F        	   811: 	subi.w	#$1f,d0
-00:0026308E 31400012        	   812: 	move.w	d0,O_VY(a0)
-00:00263092 42A80014        	   813: 	clr.l	O_AX(a0)
-00:00263096 3007            	   814: 	move.w	d7,d0
-00:00263098 D040            	   815: 	add.w	d0,d0
-00:0026309A D040            	   816: 	add.w	d0,d0
-00:0026309C 43F900287BFC    	   817: 	lea	T_19C4,a1
-00:002630A2 217100000040    	   818: 	move.l	(a1,d0.w),O_OX(a0)
-00:002630A8 31410036        	   819: 	move.w	d1,O_ACNT(a0)
-00:002630AC 3007            	   820: 	move.w	d7,d0
-00:002630AE D040            	   821: 	add.w	d0,d0
-00:002630B0 43F900287C1C    	   822: 	lea	T_19C8,a1
-00:002630B6 31710000002E    	   823: 	move.w	(a1,d0.w),O_FLAG(a0)
-00:002630BC 43E80044        	   824: 	lea	OBJ_SIZE(a0),a1
-00:002630C0 2B490088        	   825: 	move.l	a1,SYS+S_SEARCH(a5)
-00:002630C4 4E75            	   826: 	rts
-                            	   827: 
-                            	   828: ; id 11: item, state 6 ($1C94)
-                            	   829: sp_item6:
-00:002630C6 47EB011A        	   830: 	lea	282(a3),a3		; [cyc] block
-00:002630CA 6100FA80        	   831: 	bsr	find_free
-00:002630CE 30BC0006        	   832: 	move.w	#6,(a0)
-00:002630D2 302A0002        	   833: 	move.w	2(a2),d0
-00:002630D6 31400002        	   834: 	move.w	d0,O_TYPE(a0)
-00:002630DA 116A00090018    	   835: 	move.b	9(a2),O_ITEM(a0)
-00:002630E0 216A00040006    	   836: 	move.l	4(a2),O_X(a0)
-00:002630E6 316A000A003C    	   837: 	move.w	10(a2),O_P1E(a0)
-00:002630EC 42680030        	   838: 	clr.w	O_AFRAME(a0)
-00:002630F0 5940            	   839: 	subq.w	#4,d0
-00:002630F2 D040            	   840: 	add.w	d0,d0
-00:002630F4 D040            	   841: 	add.w	d0,d0
-00:002630F6 3140002C        	   842: 	move.w	d0,O_ABASE(a0)
-00:002630FA 42680036        	   843: 	clr.w	O_ACNT(a0)
-00:002630FE 317C00010032    	   844: 	move.w	#1,O_TIMER(a0)
-00:00263104 43E80044        	   845: 	lea	OBJ_SIZE(a0),a1
-00:00263108 2B490088        	   846: 	move.l	a1,SYS+S_SEARCH(a5)
-00:0026310C 4E75            	   847: 	rts
-                            	   848: 
-                            	   849: ; id 12: item, state 7 ($19CC)
-                            	   850: sp_item7:
-00:0026310E 47EB01D4        	   851: 	lea	468(a3),a3		; [cyc] block
-00:00263112 6100FA38        	   852: 	bsr	find_free
-00:00263116 30BC0007        	   853: 	move.w	#7,(a0)
-00:0026311A 3E2A0002        	   854: 	move.w	2(a2),d7
-00:0026311E 31470002        	   855: 	move.w	d7,O_TYPE(a0)
-00:00263122 116A00090018    	   856: 	move.b	9(a2),O_ITEM(a0)
-00:00263128 316A000A003C    	   857: 	move.w	10(a2),O_P1E(a0)
-00:0026312E 362D0084        	   858: 	move.w	SYS+S_CNT84(a5),d3
-00:00263132 5243            	   859: 	addq.w	#1,d3
-00:00263134 3B430084        	   860: 	move.w	d3,SYS+S_CNT84(a5)
-00:00263138 0243000F        	   861: 	andi.w	#$f,d3
-00:0026313C 31430030        	   862: 	move.w	d3,O_AFRAME(a0)
-00:00263140 3407            	   863: 	move.w	d7,d2
-00:00263142 EB4A            	   864: 	lsl.w	#5,d2
-00:00263144 06420034        	   865: 	addi.w	#$34,d2
-00:00263148 3142002C        	   866: 	move.w	d2,O_ABASE(a0)
-00:0026314C 322D0082        	   867: 	move.w	SYS+S_CNT82(a5),d1
-00:00263150 5241            	   868: 	addq.w	#1,d1
-00:00263152 3B410082        	   869: 	move.w	d1,SYS+S_CNT82(a5)
-00:00263156 02410003        	   870: 	andi.w	#3,d1
-00:0026315A 31410036        	   871: 	move.w	d1,O_ACNT(a0)
-00:0026315E 6700000C        	   872: 	beq	.na
-00:00263162 47EB00C6        	   873: 	lea	198(a3),a3		; [cyc] fall-through
-00:00263166 3003            	   874: 	move.w	d3,d0
-00:00263168 6100FB30        	   875: 	bsr	copy_anim_1800
-                            	   876: .na:
-00:0026316C 216A00040006    	   877: 	move.l	4(a2),O_X(a0)
-00:00263172 3007            	   878: 	move.w	d7,d0
-00:00263174 D040            	   879: 	add.w	d0,d0
-00:00263176 D040            	   880: 	add.w	d0,d0
-00:00263178 43F900287C0C    	   881: 	lea	T_1AE0,a1
-00:0026317E 217100000040    	   882: 	move.l	(a1,d0.w),O_OX(a0)
-00:00263184 3007            	   883: 	move.w	d7,d0
-00:00263186 D040            	   884: 	add.w	d0,d0
-00:00263188 43F900287C24    	   885: 	lea	T_1AE4,a1
-00:0026318E 31710000002E    	   886: 	move.w	(a1,d0.w),O_FLAG(a0)
-00:00263194 317C00010032    	   887: 	move.w	#1,O_TIMER(a0)
-00:0026319A 43E80044        	   888: 	lea	OBJ_SIZE(a0),a1
-00:0026319E 2B490088        	   889: 	move.l	a1,SYS+S_SEARCH(a5)
-00:002631A2 4E75            	   890: 	rts
-                            	   891: 
-                            	   892: ; id 13: remove slot REQ1, logging items ($2020)
-                            	   893: sp_removeitem:
-00:002631A4 47EB00A6        	   894: 	lea	166(a3),a3		; [cyc] block
-00:002631A8 302A0002        	   895: 	move.w	2(a2),d0
-00:002631AC 6100F9D6        	   896: 	bsr	slot_by_index
-00:002631B0 0C500005        	   897: 	cmpi.w	#5,(a0)
-00:002631B4 6300000A        	   898: 	bls	.k
-00:002631B8 47EB006A        	   899: 	lea	106(a3),a3		; [cyc] fall-through
-00:002631BC 6100FAC6        	   900: 	bsr	push_removed
-                            	   901: .k:
-00:002631C0 4250            	   902: 	clr.w	(a0)
-00:002631C2 4E75            	   903: 	rts
-                            	   904: 
-                            	   905: ; id 14: debris stops bouncing ($1D28)
-                            	   906: sp_stopbounce:
-00:002631C4 47EB0014        	   907: 	lea	20(a3),a3		; [cyc] block
-00:002631C8 41ED0090        	   908: 	lea	POOL(a5),a0
-00:002631CC 727F            	   909: 	moveq	#NOBJ-1,d1
-                            	   910: .l:
-00:002631CE 47EB0030        	   911: 	lea	48(a3),a3		; [cyc] block
-00:002631D2 0C500004        	   912: 	cmpi.w	#4,(a0)
-00:002631D6 6600000A        	   913: 	bne	.n
-00:002631DA 47EB001A        	   914: 	lea	26(a3),a3		; [cyc] fall-through
-00:002631DE 42680032        	   915: 	clr.w	O_TIMER(a0)
-                            	   916: .n:
-00:002631E2 41E80044        	   917: 	lea	OBJ_SIZE(a0),a0
-00:002631E6 51C9FFE6        	   918: 	dbra	d1,.l
-00:002631EA 47EB001C        	   919: 	lea	28(a3),a3		; [cyc] fall-through
-00:002631EE 4E75            	   920: 	rts
-                            	   921: ; ---------------------------------------------------------------------------
-                            	   922: ; EST engine: per-frame update (ARM $55C) and animation-only pass (ARM $1730)
-                            	   923: ; Registers inside the object loop:
-                            	   924: ;   a0 = object, d7 = y scroll offset (GLOB word 7), d6 = slot counter,
-                            	   925: ;   a4 = SHWIN, a5 = HLEV, a3 = cycle accumulator. State routines may use d0-d5, a1, a2, a6.
-                            	   926: ; ---------------------------------------------------------------------------
-                            	   927: 
-                            	   928: ; SPLIT v, field, t1, t2 : v.w = accumulator value (s16)
-                            	   929: ;   field(a0) <- remainder (sign of v), v <- quotient (truncated toward 0)
-                            	   930: 
-                            	   931: ; SPLITV v, vel, acc, t1, t2 : SPLIT with the next frame's velocity added in place
-                            	   932: ;   acc(a0) <- remainder + vel(a0), v <- quotient
-                            	   933: 
-                            	   934: ; SPRXY x, y, ox, oy, t : sprite position words
-                            	   935: 
-                            	   936: ; The object loop accounts for itself: every slot is charged UPD_DEAD up front, a live
-                            	   937: ; slot adds UPD_LIVE-UPD_DEAD (its state routine accounts for itself, rts included), a
-                            	   938: ; slot above state 7 (skipped, as by the firmware) adds UPD_HIGH-UPD_DEAD.
-                            	   939: ;   dead   8 + 10 + 8 + 10                                    = 36
-                            	   940: ;   live   8 + 8 + 8 + 8 + 8 + 4 + 14 + 22 + 8 + 10            = 98
-                            	   941: ;   high   8 + 8 + 8 + 10 + 8 + 10 + 8 + 10                    = 70
-                            	   942: ; plus the entry bra.s (10) and 4 for the last dbra (falls through: 14).
-                            	   943: UPD_DEAD	equ	36
-                            	   944: UPD_LIVE	equ	98
-                            	   945: UPD_HIGH	equ	70
-                            	   946: 
-                            	   947: est_update:
-00:002631F0 3E2D229E        	   948: 	move.w	GLOB+14(a5),d7
-00:002631F4 41ED0090        	   949: 	lea	POOL(a5),a0
-00:002631F8 7C7F            	   950: 	moveq	#NOBJ-1,d6
-00:002631FA 47EB120E        	   951: 	lea	NOBJ*UPD_DEAD+10+4(a3),a3	; @cyc-adjust
-                            	   952: 	; @cyc-off
-00:002631FE 6006            	   953: 	bra.s	.loop			; 10
-00:00263200 47EB0022        	   954: .high:	lea	UPD_HIGH-UPD_DEAD(a3),a3	;  8  @cyc-adjust
-00:00263204 6018            	   955: 	bra.s	.next			; 10
-00:00263206 3010            	   956: .loop:	move.w	(a0),d0			;  8
-00:00263208 6714            	   957: 	beq.s	.next			; 10 / 8
-00:0026320A 0C400007        	   958: 	cmpi.w	#7,d0			;  8
-00:0026320E 62F0            	   959: 	bhi.s	.high			; 10 / 8
-00:00263210 47EB003E        	   960: 	lea	UPD_LIVE-UPD_DEAD(a3),a3	;  8  @cyc-adjust
-00:00263214 D040            	   961: 	add.w	d0,d0			;  4
-00:00263216 303B0032        	   962: 	move.w	.tab-2(pc,d0.w),d0	; 14
-00:0026321A 4EBB0030        	   963: 	jsr	.tab(pc,d0.w)		; 22
-00:0026321E 41E80044        	   964: .next:	lea	OBJ_SIZE(a0),a0		;  8
-00:00263222 51CEFFE2        	   965: 	dbra	d6,.loop		; 10 / 14
-                            	   966: 	; @cyc-on
-00:00263226 4A6D0012        	   967: 	tst.w	SYS+$12(a5)
-00:0026322A 6700000A        	   968: 	beq	.t1
-00:0026322E 47EB001A        	   969: 	lea	26(a3),a3		; [cyc] fall-through
-00:00263232 536D0012        	   970: 	subq.w	#1,SYS+$12(a5)
-                            	   971: .t1:
-00:00263236 4A6D0014        	   972: 	tst.w	SYS+$14(a5)
-00:0026323A 6700000A        	   973: 	beq	.t2
-00:0026323E 47EB001A        	   974: 	lea	26(a3),a3		; [cyc] fall-through
-00:00263242 536D0014        	   975: 	subq.w	#1,SYS+$14(a5)
-                            	   976: .t2:
-00:00263246 426D0080        	   977: 	clr.w	SYS+S_BUSY(a5)
-00:0026324A 4E75            	   978: 	rts
-                            	   979: .tab:
-00:0026324C 079A            	   980: 	dc.w	st1-.tab, st2-.tab, st3-.tab, st4-.tab, st5-.tab, st6-.tab, st7-.tab
-00:0026324E 01A6
-00:00263250 06C6
-00:00263252 0906
-00:00263254 0A98
-00:00263256 0B7E
-00:00263258 0BD6
-                            	   981: 
-                            	   982: est_animate:
-00:0026325A 41ED0090        	   983: 	lea	POOL(a5),a0
-                            	   984: .loop:
-00:0026325E 47EB0042        	   985: 	lea	66(a3),a3		; [cyc] block
-00:00263262 3010            	   986: 	move.w	(a0),d0
-00:00263264 0C400004        	   987: 	cmpi.w	#4,d0
-00:00263268 65000032        	   988: 	bcs	.next
-00:0026326C 47EB0052        	   989: 	lea	82(a3),a3		; [cyc] fall-through
-00:00263270 67000026        	   990: 	beq	.up
-00:00263274 47EB001C        	   991: 	lea	28(a3),a3		; [cyc] fall-through
-00:00263278 0C400006        	   992: 	cmpi.w	#6,d0
-00:0026327C 6700001A        	   993: 	beq	.up
-00:00263280 47EBFFDE        	   994: 	lea	-34(a3),a3		; [cyc] fall-through
-00:00263284 0C400007        	   995: 	cmpi.w	#7,d0
-00:00263288 62000012        	   996: 	bhi	.next
-00:0026328C 47EB0052        	   997: 	lea	82(a3),a3		; [cyc] fall-through
-00:00263290 61000022        	   998: 	bsr	anim_down	; 5, 7
-00:00263294 60000006        	   999: 	bra	.next
-                            	  1000: .up:
-00:00263298 6100004C        	  1001: 	bsr	anim_up	; 4, 6
-                            	  1002: .next:
-00:0026329C 41E80044        	  1003: 	lea	OBJ_SIZE(a0),a0
-00:002632A0 B1FC0081D64C    	  1004: 	cmpa.l	#HLEV+POOL+(NOBJ-1)*OBJ_SIZE,a0
-00:002632A6 6300FFB6        	  1005: 	bls	.loop
-00:002632AA 47EB002A        	  1006: 	lea	42(a3),a3		; [cyc] fall-through
-00:002632AE 426D0080        	  1007: 	clr.w	SYS+S_BUSY(a5)
-00:002632B2 4E75            	  1008: 	rts
-                            	  1009: 
-                            	  1010: ; ---------------------------------------------------------------------------
-                            	  1011: ; animation helpers
-                            	  1012: ; ---------------------------------------------------------------------------
-                            	  1013: anim_down:
-00:002632B4 53680036        	  1014: 	subq.w	#1,O_ACNT(a0)	; counter at 0: it wraps (carry), reload below
-00:002632B8 65000004        	  1015: 	bcs	.cyc_stub141	; @unlikely
-00:002632BC 4E75            	  1016: 	rts
-                            	  1017: .cyc_stub141:
-00:002632BE 47EB00EA        	  1018: 	lea	234(a3),a3		; [cyc] unlikely edge
-00:002632C2 60000002        	  1019: 	bra	.f
-                            	  1020: .f:
-00:002632C6 317C00030036    	  1021: 	move.w	#3,O_ACNT(a0)
-00:002632CC 30280030        	  1022: 	move.w	O_AFRAME(a0),d0
-00:002632D0 3200            	  1023: 	move.w	d0,d1
-00:002632D2 5341            	  1024: 	subq.w	#1,d1
-00:002632D4 64000008        	  1025: 	bcc	.s
-00:002632D8 47EB000E        	  1026: 	lea	14(a3),a3		; [cyc] fall-through
-00:002632DC 720F            	  1027: 	moveq	#$f,d1
-                            	  1028: .s:
-00:002632DE 31410030        	  1029: 	move.w	d1,O_AFRAME(a0)
-00:002632E2 6000F9B6        	  1030: 	bra	copy_anim_1800	; frame = old value (d0)
-                            	  1031: 
-                            	  1032: anim_up:
-00:002632E6 53680036        	  1033: 	subq.w	#1,O_ACNT(a0)
-00:002632EA 65000004        	  1034: 	bcs	.cyc_stub146	; @unlikely
-00:002632EE 4E75            	  1035: 	rts
-                            	  1036: .cyc_stub146:
-00:002632F0 47EB00EE        	  1037: 	lea	238(a3),a3		; [cyc] unlikely edge
-00:002632F4 60000002        	  1038: 	bra	.f
-                            	  1039: .f:
-00:002632F8 317C00050036    	  1040: 	move.w	#5,O_ACNT(a0)
-00:002632FE 30280030        	  1041: 	move.w	O_AFRAME(a0),d0
-00:00263302 7200            	  1042: 	moveq	#0,d1
-00:00263304 0C400003        	  1043: 	cmpi.w	#3,d0
-00:00263308 6400000A        	  1044: 	bcc	.s
-00:0026330C 47EB0012        	  1045: 	lea	18(a3),a3		; [cyc] fall-through
-00:00263310 3200            	  1046: 	move.w	d0,d1
-00:00263312 5241            	  1047: 	addq.w	#1,d1
-                            	  1048: .s:
-00:00263314 31410030        	  1049: 	move.w	d1,O_AFRAME(a0)
-00:00263318 6000F980        	  1050: 	bra	copy_anim_1800
-                            	  1051: 
-                            	  1052: ; dir_anim: if the type has directional sprites, ABASE = P1E + 4*(((ang+4)&$ff)>>3)
-                            	  1053: ; in: d0.w = angle (0..255); clobbers d1
-                            	  1054: dir_anim:
-00:0026331C 4A28003F        	  1055: 	tst.b	O_DIRANIM(a0)
-00:00263320 6700001C        	  1056: 	beq	.x
-00:00263324 47EB0046        	  1057: 	lea	70(a3),a3		; [cyc] fall-through
-00:00263328 3200            	  1058: 	move.w	d0,d1
-00:0026332A 5841            	  1059: 	addq.w	#4,d1
-00:0026332C 024100FF        	  1060: 	andi.w	#$ff,d1
-00:00263330 E649            	  1061: 	lsr.w	#3,d1
-00:00263332 D241            	  1062: 	add.w	d1,d1
-00:00263334 D241            	  1063: 	add.w	d1,d1
-00:00263336 D268003C        	  1064: 	add.w	O_P1E(a0),d1
-00:0026333A 3141002C        	  1065: 	move.w	d1,O_ABASE(a0)
-                            	  1066: .x:
-00:0026333E 4E75            	  1067: 	rts
-                            	  1068: 
-                            	  1069: ; rng: additive lagged Fibonacci (ARM $08010CD8) -> d0.l; clobbers d1, d2, a1
-                            	  1070: rng:
-00:00263340 43ED22A4        	  1071: 	lea	RNG_S(a5),a1
-00:00263344 222D2384        	  1072: 	move.l	RNG_J(a5),d1
-00:00263348 242D2380        	  1073: 	move.l	RNG_K(a5),d2
-00:0026334C D281            	  1074: 	add.l	d1,d1
-00:0026334E D281            	  1075: 	add.l	d1,d1
-00:00263350 D482            	  1076: 	add.l	d2,d2
-00:00263352 D482            	  1077: 	add.l	d2,d2
-00:00263354 20311800        	  1078: 	move.l	(a1,d1.l),d0
-00:00263358 D0B12800        	  1079: 	add.l	(a1,d2.l),d0
-00:0026335C 23801800        	  1080: 	move.l	d0,(a1,d1.l)
-00:00263360 E481            	  1081: 	asr.l	#2,d1
-00:00263362 E482            	  1082: 	asr.l	#2,d2
-00:00263364 5381            	  1083: 	subq.l	#1,d1	; j - 1
-00:00263366 5382            	  1084: 	subq.l	#1,d2	; k - 1
-00:00263368 6A000014        	  1085: 	bpl	.kok
-00:0026336C 47EB000A        	  1086: 	lea	10(a3),a3		; [cyc] fall-through
-00:00263370 2B412384        	  1087: 	move.l	d1,RNG_J(a5)	; no wrap check on this path (firmware quirk)
-00:00263374 7436            	  1088: 	moveq	#$36,d2
-00:00263376 2B422380        	  1089: 	move.l	d2,RNG_K(a5)
-00:0026337A 60000016        	  1090: 	bra	.x
-                            	  1091: .kok:
-00:0026337E 2B422380        	  1092: 	move.l	d2,RNG_K(a5)
-00:00263382 4A81            	  1093: 	tst.l	d1
-00:00263384 6A000008        	  1094: 	bpl	.jok
-00:00263388 47EB000E        	  1095: 	lea	14(a3),a3		; [cyc] fall-through
-00:0026338C 7236            	  1096: 	moveq	#$36,d1
-                            	  1097: .jok:
-00:0026338E 2B412384        	  1098: 	move.l	d1,RNG_J(a5)
-                            	  1099: .x:
-00:00263392 02807FFFFFFF    	  1100: 	andi.l	#$7fffffff,d0
-00:00263398 4E75            	  1101: 	rts
+                            	   628: 	; Converts every state-2 bullet (126 at a boss's death): the per-object work is kept
+                            	   629: 	; in registers and adjacent fields are written as longs.
+                            	   630: 	;   d7 = state 5 : type (O_STATE, O_TYPE)     a6 = base : limit (O_ABASE, O_FLAG)
+                            	   631: 	;   d6 = counter S_CNT82                      d3 = current frame (S_CNT84 & $f)
+                            	   632: 	;   a1 = animation entry of the current frame, T_ANIM + 8*(base + frame) as
+                            	   633: 	;        copy_anim_1800 computes it, and d2 = its first word (|$1800) : base.
+                            	   634: 	; The entry only changes with the frame, every 4th object. The counters are stored back
+                            	   635: 	; after the loop; nothing reads them in between.
+00:00262E52 47EB014E        	   636: 	lea	334(a3),a3		; [cyc] block
+00:00262E56 7E00            	   637: 	moveq	#0,d7
+00:00262E58 3E2A0002        	   638: 	move.w	2(a2),d7	; type
+00:00262E5C 7400            	   639: 	moveq	#0,d2
+00:00262E5E 3407            	   640: 	move.w	d7,d2
+00:00262E60 E54A            	   641: 	lsl.w	#2,d2
+00:00262E62 43F900287BFC    	   642: 	lea	T_19C4,a1
+00:00262E68 28312000        	   643: 	move.l	(a1,d2.w),d4	; ox:oy
+00:00262E6C 7600            	   644: 	moveq	#0,d3
+00:00262E6E 3607            	   645: 	move.w	d7,d3
+00:00262E70 D643            	   646: 	add.w	d3,d3
+00:00262E72 43F900287C1C    	   647: 	lea	T_19C8,a1
+00:00262E78 3407            	   648: 	move.w	d7,d2
+00:00262E7A EB4A            	   649: 	lsl.w	#5,d2
+00:00262E7C 06420024        	   650: 	addi.w	#$24,d2	; animation base
+00:00262E80 3002            	   651: 	move.w	d2,d0
+00:00262E82 4840            	   652: 	swap	d0
+00:00262E84 30313000        	   653: 	move.w	(a1,d3.w),d0	; limit
+00:00262E88 2C40            	   654: 	movea.l	d0,a6
+00:00262E8A 008700050000    	   655: 	ori.l	#$50000,d7
+00:00262E90 7600            	   656: 	moveq	#0,d3
+00:00262E92 362D0084        	   657: 	move.w	SYS+S_CNT84(a5),d3
+00:00262E96 0243000F        	   658: 	andi.w	#$f,d3	; current frame
+00:00262E9A 610000AC        	   659: 	bsr	todebris_entry
+00:00262E9E 3C2D0082        	   660: 	move.w	SYS+S_CNT82(a5),d6
+00:00262EA2 41ED0090        	   661: 	lea	POOL(a5),a0
+00:00262EA6 7A7F            	   662: 	moveq	#NOBJ-1,d5
+                            	   663: .l:
+00:00262EA8 47EB013C        	   664: 	lea	316(a3),a3		; [cyc] block
+00:00262EAC 3010            	   665: 	move.w	(a0),d0
+00:00262EAE 0C400002        	   666: 	cmpi.w	#2,d0
+00:00262EB2 67000018        	   667: 	beq	.conv
+00:00262EB6 47EBFF14        	   668: 	lea	-236(a3),a3		; [cyc] fall-through
+00:00262EBA 0C400001        	   669: 	cmpi.w	#1,d0
+00:00262EBE 66000076        	   670: 	bne	.n
+00:00262EC2 47EB0020        	   671: 	lea	32(a3),a3		; [cyc] fall-through
+00:00262EC6 4250            	   672: 	clr.w	(a0)
+00:00262EC8 6000006C        	   673: 	bra	.n
+                            	   674: .conv:
+00:00262ECC 2087            	   675: 	move.l	d7,(a0)	; state 5, type
+00:00262ECE 214E002C        	   676: 	move.l	a6,O_ABASE(a0)	; animation base, limit
+00:00262ED2 31430030        	   677: 	move.w	d3,O_AFRAME(a0)
+00:00262ED6 5246            	   678: 	addq.w	#1,d6
+00:00262ED8 3206            	   679: 	move.w	d6,d1
+00:00262EDA 02410003        	   680: 	andi.w	#3,d1
+00:00262EDE 6600001C        	   681: 	bne	.anim
+00:00262EE2 47EB006C        	   682: 	lea	108(a3),a3		; [cyc] fall-through
+00:00262EE6 362D0084        	   683: 	move.w	SYS+S_CNT84(a5),d3
+00:00262EEA 5243            	   684: 	addq.w	#1,d3
+00:00262EEC 3B430084        	   685: 	move.w	d3,SYS+S_CNT84(a5)
+00:00262EF0 0243000F        	   686: 	andi.w	#$f,d3
+00:00262EF4 61000052        	   687: 	bsr	todebris_entry
+00:00262EF8 60000016        	   688: 	bra	.set
+                            	   689: .anim:
+00:00262EFC 4842            	   690: 	swap	d2	; copy_anim_1800 with the current frame
+00:00262EFE 31420020        	   691: 	move.w	d2,O_SPR(a0)
+00:00262F02 4842            	   692: 	swap	d2
+00:00262F04 316900020022    	   693: 	move.w	2(a1),O_SPR+2(a0)
+00:00262F0A 216900040024    	   694: 	move.l	4(a1),O_SPR+4(a0)
+                            	   695: .set:
+00:00262F10 31410036        	   696: 	move.w	d1,O_ACNT(a0)
+00:00262F14 30280012        	   697: 	move.w	O_VY(a0),d0	; VX : VY
+00:00262F18 0240000F        	   698: 	andi.w	#$f,d0
+00:00262F1C 5F40            	   699: 	subq.w	#7,d0
+00:00262F1E 4840            	   700: 	swap	d0
+00:00262F20 3001            	   701: 	move.w	d1,d0
+00:00262F22 ED48            	   702: 	lsl.w	#6,d0
+00:00262F24 04400040        	   703: 	subi.w	#$40,d0
+00:00262F28 4840            	   704: 	swap	d0
+00:00262F2A 21400010        	   705: 	move.l	d0,O_VX(a0)
+00:00262F2E 42A80014        	   706: 	clr.l	O_AX(a0)	; AX and AY
+00:00262F32 21440040        	   707: 	move.l	d4,O_OX(a0)
+                            	   708: .n:
+00:00262F36 41E80044        	   709: 	lea	OBJ_SIZE(a0),a0
+00:00262F3A 51CDFF6C        	   710: 	dbra	d5,.l
+00:00262F3E 47EB0028        	   711: 	lea	40(a3),a3		; [cyc] fall-through
+00:00262F42 3B460082        	   712: 	move.w	d6,SYS+S_CNT82(a5)
+00:00262F46 4E75            	   713: 	rts
+                            	   714: 
+                            	   715: ; todebris_entry: a1 = T_ANIM + 8*(d2.w + d3), 32-bit like copy_anim_1800 (d3: upper word
+                            	   716: ; 0); high word of d2 = the entry's first word with the copy_anim_1800 mask
+                            	   717: todebris_entry:
+00:00262F48 7000            	   718: 	moveq	#0,d0
+00:00262F4A 3002            	   719: 	move.w	d2,d0
+00:00262F4C D083            	   720: 	add.l	d3,d0
+00:00262F4E E788            	   721: 	lsl.l	#3,d0
+00:00262F50 43F9002863E4    	   722: 	lea	T_ANIM,a1
+00:00262F56 D3C0            	   723: 	adda.l	d0,a1
+00:00262F58 3011            	   724: 	move.w	(a1),d0
+00:00262F5A 0240E0FF        	   725: 	andi.w	#$e0ff,d0
+00:00262F5E 00401800        	   726: 	ori.w	#$1800,d0
+00:00262F62 4842            	   727: 	swap	d2
+00:00262F64 3400            	   728: 	move.w	d0,d2
+00:00262F66 4842            	   729: 	swap	d2
+00:00262F68 4E75            	   730: 	rts
+                            	   731: 
+                            	   732: ; debris4_init: a0 = slot, d7 = type, d4 = x:y, d2 = animation base
+                            	   733: debris4_init:
+00:00262F6A 30BC0004        	   734: 	move.w	#4,(a0)
+00:00262F6E 31470002        	   735: 	move.w	d7,O_TYPE(a0)
+00:00262F72 302D0086        	   736: 	move.w	SYS+S_CNT86(a5),d0
+00:00262F76 5240            	   737: 	addq.w	#1,d0
+00:00262F78 3B400086        	   738: 	move.w	d0,SYS+S_CNT86(a5)
+00:00262F7C 3200            	   739: 	move.w	d0,d1
+00:00262F7E 02400003        	   740: 	andi.w	#3,d0
+00:00262F82 D040            	   741: 	add.w	d0,d0
+00:00262F84 D040            	   742: 	add.w	d0,d0
+00:00262F86 43F900287BEC    	   743: 	lea	T_172C,a1
+00:00262F8C 317100000010    	   744: 	move.w	(a1,d0.w),O_VX(a0)
+00:00262F92 30310002        	   745: 	move.w	2(a1,d0.w),d0
+00:00262F96 08010000        	   746: 	btst	#0,d1
+00:00262F9A 67000008        	   747: 	beq	.e
+00:00262F9E 47EB000E        	   748: 	lea	14(a3),a3		; [cyc] fall-through
+00:00262FA2 4440            	   749: 	neg.w	d0
+                            	   750: .e:
+00:00262FA4 31400012        	   751: 	move.w	d0,O_VY(a0)
+00:00262FA8 21440006        	   752: 	move.l	d4,O_X(a0)
+00:00262FAC 42A80014        	   753: 	clr.l	O_AX(a0)
+00:00262FB0 317C00080032    	   754: 	move.w	#8,O_TIMER(a0)
+00:00262FB6 42680030        	   755: 	clr.w	O_AFRAME(a0)
+00:00262FBA 3142002C        	   756: 	move.w	d2,O_ABASE(a0)
+00:00262FBE 42680036        	   757: 	clr.w	O_ACNT(a0)
+00:00262FC2 4E75            	   758: 	rts
+                            	   759: 
+                            	   760: ; id 8: REQ6 bouncing debris pieces ($1BB0)
+                            	   761: sp_multidebris:
+00:00262FC4 47EB007E        	   762: 	lea	126(a3),a3		; [cyc] block
+00:00262FC8 3E2A0002        	   763: 	move.w	2(a2),d7
+00:00262FCC 282A0004        	   764: 	move.l	4(a2),d4	; x:y
+00:00262FD0 3407            	   765: 	move.w	d7,d2
+00:00262FD2 D442            	   766: 	add.w	d2,d2
+00:00262FD4 D442            	   767: 	add.w	d2,d2
+00:00262FD6 04420010        	   768: 	subi.w	#$10,d2
+00:00262FDA 206D0088        	   769: 	movea.l	SYS+S_SEARCH(a5),a0
+00:00262FDE 3A2A000C        	   770: 	move.w	12(a2),d5
+00:00262FE2 67000040        	   771: 	beq	.done
+00:00262FE6 47EBFFEE        	   772: 	lea	-18(a3),a3		; [cyc] fall-through
+00:00262FEA 5345            	   773: 	subq.w	#1,d5
+                            	   774: .each:
+00:00262FEC 47EB0162        	   775: 	lea	354(a3),a3		; [cyc] block
+00:00262FF0 B1FC0081D64C    	   776: 	cmpa.l	#HLEV+POOL+(NOBJ-1)*OBJ_SIZE,a0
+00:00262FF6 6300000A        	   777: 	bls	.c
+00:00262FFA 47EB0012        	   778: 	lea	18(a3),a3		; [cyc] fall-through
+00:00262FFE 41ED0090        	   779: 	lea	POOL(a5),a0
+                            	   780: .c:
+00:00263002 4A50            	   781: 	tst.w	(a0)
+00:00263004 6700000E        	   782: 	beq	.f
+00:00263008 47EBFEEC        	   783: 	lea	-276(a3),a3		; [cyc] fall-through
+00:0026300C 41E80044        	   784: 	lea	OBJ_SIZE(a0),a0
+00:00263010 6000FFDA        	   785: 	bra	.each
+                            	   786: .f:
+00:00263014 6100FF54        	   787: 	bsr	debris4_init
+00:00263018 41E80044        	   788: 	lea	OBJ_SIZE(a0),a0
+00:0026301C 51CDFFCE        	   789: 	dbra	d5,.each
+00:00263020 47EB002C        	   790: 	lea	44(a3),a3		; [cyc] fall-through
+                            	   791: .done:
+00:00263024 2B480088        	   792: 	move.l	a0,SYS+S_SEARCH(a5)
+00:00263028 4E75            	   793: 	rts
+                            	   794: 
+                            	   795: ; id 9: one bouncing debris piece ($1AE8)
+                            	   796: sp_debris:
+00:0026302A 47EB01B4        	   797: 	lea	436(a3),a3		; [cyc] block
+00:0026302E 6100FB1C        	   798: 	bsr	find_free
+00:00263032 3E2A0002        	   799: 	move.w	2(a2),d7
+00:00263036 282A0004        	   800: 	move.l	4(a2),d4
+00:0026303A 3407            	   801: 	move.w	d7,d2
+00:0026303C 5942            	   802: 	subq.w	#4,d2
+00:0026303E D442            	   803: 	add.w	d2,d2
+00:00263040 D442            	   804: 	add.w	d2,d2
+00:00263042 6100FF26        	   805: 	bsr	debris4_init
+00:00263046 43E80044        	   806: 	lea	OBJ_SIZE(a0),a1
+00:0026304A 2B490088        	   807: 	move.l	a1,SYS+S_SEARCH(a5)
+00:0026304E 4E75            	   808: 	rts
+                            	   809: 
+                            	   810: ; id 10: falling debris ($189C)
+                            	   811: sp_falling:
+00:00263050 47EB02C2        	   812: 	lea	706(a3),a3		; [cyc] block
+00:00263054 6100FAF6        	   813: 	bsr	find_free
+00:00263058 30BC0005        	   814: 	move.w	#5,(a0)
+00:0026305C 3E2A0002        	   815: 	move.w	2(a2),d7
+00:00263060 31470002        	   816: 	move.w	d7,O_TYPE(a0)
+00:00263064 362D0084        	   817: 	move.w	SYS+S_CNT84(a5),d3
+00:00263068 0243000F        	   818: 	andi.w	#$f,d3
+00:0026306C 31430030        	   819: 	move.w	d3,O_AFRAME(a0)
+00:00263070 3407            	   820: 	move.w	d7,d2
+00:00263072 EB4A            	   821: 	lsl.w	#5,d2
+00:00263074 06420024        	   822: 	addi.w	#$24,d2
+00:00263078 3142002C        	   823: 	move.w	d2,O_ABASE(a0)
+00:0026307C 322D0082        	   824: 	move.w	SYS+S_CNT82(a5),d1
+00:00263080 5241            	   825: 	addq.w	#1,d1
+00:00263082 3B410082        	   826: 	move.w	d1,SYS+S_CNT82(a5)
+00:00263086 02410003        	   827: 	andi.w	#3,d1
+00:0026308A 6600000E        	   828: 	bne	.anim
+00:0026308E 47EBFF58        	   829: 	lea	-168(a3),a3		; [cyc] fall-through
+00:00263092 526D0084        	   830: 	addq.w	#1,SYS+S_CNT84(a5)
+00:00263096 6000000C        	   831: 	bra	.set
+                            	   832: .anim:
+00:0026309A 3003            	   833: 	move.w	d3,d0
+00:0026309C 3F01            	   834: 	move.w	d1,-(sp)
+00:0026309E 6100FBFA        	   835: 	bsr	copy_anim_1800
+00:002630A2 321F            	   836: 	move.w	(sp)+,d1
+                            	   837: .set:
+00:002630A4 216A00040006    	   838: 	move.l	4(a2),O_X(a0)
+00:002630AA 3001            	   839: 	move.w	d1,d0
+00:002630AC ED48            	   840: 	lsl.w	#6,d0
+00:002630AE 04400040        	   841: 	subi.w	#$40,d0
+00:002630B2 31400010        	   842: 	move.w	d0,O_VX(a0)
+00:002630B6 30280012        	   843: 	move.w	O_VY(a0),d0
+00:002630BA 0240003F        	   844: 	andi.w	#$3f,d0
+00:002630BE 0440001F        	   845: 	subi.w	#$1f,d0
+00:002630C2 31400012        	   846: 	move.w	d0,O_VY(a0)
+00:002630C6 42A80014        	   847: 	clr.l	O_AX(a0)
+00:002630CA 3007            	   848: 	move.w	d7,d0
+00:002630CC D040            	   849: 	add.w	d0,d0
+00:002630CE D040            	   850: 	add.w	d0,d0
+00:002630D0 43F900287BFC    	   851: 	lea	T_19C4,a1
+00:002630D6 217100000040    	   852: 	move.l	(a1,d0.w),O_OX(a0)
+00:002630DC 31410036        	   853: 	move.w	d1,O_ACNT(a0)
+00:002630E0 3007            	   854: 	move.w	d7,d0
+00:002630E2 D040            	   855: 	add.w	d0,d0
+00:002630E4 43F900287C1C    	   856: 	lea	T_19C8,a1
+00:002630EA 31710000002E    	   857: 	move.w	(a1,d0.w),O_FLAG(a0)
+00:002630F0 43E80044        	   858: 	lea	OBJ_SIZE(a0),a1
+00:002630F4 2B490088        	   859: 	move.l	a1,SYS+S_SEARCH(a5)
+00:002630F8 4E75            	   860: 	rts
+                            	   861: 
+                            	   862: ; id 11: item, state 6 ($1C94)
+                            	   863: sp_item6:
+00:002630FA 47EB011A        	   864: 	lea	282(a3),a3		; [cyc] block
+00:002630FE 6100FA4C        	   865: 	bsr	find_free
+00:00263102 30BC0006        	   866: 	move.w	#6,(a0)
+00:00263106 302A0002        	   867: 	move.w	2(a2),d0
+00:0026310A 31400002        	   868: 	move.w	d0,O_TYPE(a0)
+00:0026310E 116A00090018    	   869: 	move.b	9(a2),O_ITEM(a0)
+00:00263114 216A00040006    	   870: 	move.l	4(a2),O_X(a0)
+00:0026311A 316A000A003C    	   871: 	move.w	10(a2),O_P1E(a0)
+00:00263120 42680030        	   872: 	clr.w	O_AFRAME(a0)
+00:00263124 5940            	   873: 	subq.w	#4,d0
+00:00263126 D040            	   874: 	add.w	d0,d0
+00:00263128 D040            	   875: 	add.w	d0,d0
+00:0026312A 3140002C        	   876: 	move.w	d0,O_ABASE(a0)
+00:0026312E 42680036        	   877: 	clr.w	O_ACNT(a0)
+00:00263132 317C00010032    	   878: 	move.w	#1,O_TIMER(a0)
+00:00263138 43E80044        	   879: 	lea	OBJ_SIZE(a0),a1
+00:0026313C 2B490088        	   880: 	move.l	a1,SYS+S_SEARCH(a5)
+00:00263140 4E75            	   881: 	rts
+                            	   882: 
+                            	   883: ; id 12: item, state 7 ($19CC)
+                            	   884: sp_item7:
+00:00263142 47EB01D4        	   885: 	lea	468(a3),a3		; [cyc] block
+00:00263146 6100FA04        	   886: 	bsr	find_free
+00:0026314A 30BC0007        	   887: 	move.w	#7,(a0)
+00:0026314E 3E2A0002        	   888: 	move.w	2(a2),d7
+00:00263152 31470002        	   889: 	move.w	d7,O_TYPE(a0)
+00:00263156 116A00090018    	   890: 	move.b	9(a2),O_ITEM(a0)
+00:0026315C 316A000A003C    	   891: 	move.w	10(a2),O_P1E(a0)
+00:00263162 362D0084        	   892: 	move.w	SYS+S_CNT84(a5),d3
+00:00263166 5243            	   893: 	addq.w	#1,d3
+00:00263168 3B430084        	   894: 	move.w	d3,SYS+S_CNT84(a5)
+00:0026316C 0243000F        	   895: 	andi.w	#$f,d3
+00:00263170 31430030        	   896: 	move.w	d3,O_AFRAME(a0)
+00:00263174 3407            	   897: 	move.w	d7,d2
+00:00263176 EB4A            	   898: 	lsl.w	#5,d2
+00:00263178 06420034        	   899: 	addi.w	#$34,d2
+00:0026317C 3142002C        	   900: 	move.w	d2,O_ABASE(a0)
+00:00263180 322D0082        	   901: 	move.w	SYS+S_CNT82(a5),d1
+00:00263184 5241            	   902: 	addq.w	#1,d1
+00:00263186 3B410082        	   903: 	move.w	d1,SYS+S_CNT82(a5)
+00:0026318A 02410003        	   904: 	andi.w	#3,d1
+00:0026318E 31410036        	   905: 	move.w	d1,O_ACNT(a0)
+00:00263192 6700000C        	   906: 	beq	.na
+00:00263196 47EB00C6        	   907: 	lea	198(a3),a3		; [cyc] fall-through
+00:0026319A 3003            	   908: 	move.w	d3,d0
+00:0026319C 6100FAFC        	   909: 	bsr	copy_anim_1800
+                            	   910: .na:
+00:002631A0 216A00040006    	   911: 	move.l	4(a2),O_X(a0)
+00:002631A6 3007            	   912: 	move.w	d7,d0
+00:002631A8 D040            	   913: 	add.w	d0,d0
+00:002631AA D040            	   914: 	add.w	d0,d0
+00:002631AC 43F900287C0C    	   915: 	lea	T_1AE0,a1
+00:002631B2 217100000040    	   916: 	move.l	(a1,d0.w),O_OX(a0)
+00:002631B8 3007            	   917: 	move.w	d7,d0
+00:002631BA D040            	   918: 	add.w	d0,d0
+00:002631BC 43F900287C24    	   919: 	lea	T_1AE4,a1
+00:002631C2 31710000002E    	   920: 	move.w	(a1,d0.w),O_FLAG(a0)
+00:002631C8 317C00010032    	   921: 	move.w	#1,O_TIMER(a0)
+00:002631CE 43E80044        	   922: 	lea	OBJ_SIZE(a0),a1
+00:002631D2 2B490088        	   923: 	move.l	a1,SYS+S_SEARCH(a5)
+00:002631D6 4E75            	   924: 	rts
+                            	   925: 
+                            	   926: ; id 13: remove slot REQ1, logging items ($2020)
+                            	   927: sp_removeitem:
+00:002631D8 47EB00A6        	   928: 	lea	166(a3),a3		; [cyc] block
+00:002631DC 302A0002        	   929: 	move.w	2(a2),d0
+00:002631E0 6100F9A2        	   930: 	bsr	slot_by_index
+00:002631E4 0C500005        	   931: 	cmpi.w	#5,(a0)
+00:002631E8 6300000A        	   932: 	bls	.k
+00:002631EC 47EB006A        	   933: 	lea	106(a3),a3		; [cyc] fall-through
+00:002631F0 6100FA92        	   934: 	bsr	push_removed
+                            	   935: .k:
+00:002631F4 4250            	   936: 	clr.w	(a0)
+00:002631F6 4E75            	   937: 	rts
+                            	   938: 
+                            	   939: ; id 14: debris stops bouncing ($1D28)
+                            	   940: sp_stopbounce:
+00:002631F8 47EB0014        	   941: 	lea	20(a3),a3		; [cyc] block
+00:002631FC 41ED0090        	   942: 	lea	POOL(a5),a0
+00:00263200 727F            	   943: 	moveq	#NOBJ-1,d1
+                            	   944: .l:
+00:00263202 47EB0030        	   945: 	lea	48(a3),a3		; [cyc] block
+00:00263206 0C500004        	   946: 	cmpi.w	#4,(a0)
+00:0026320A 6600000A        	   947: 	bne	.n
+00:0026320E 47EB001A        	   948: 	lea	26(a3),a3		; [cyc] fall-through
+00:00263212 42680032        	   949: 	clr.w	O_TIMER(a0)
+                            	   950: .n:
+00:00263216 41E80044        	   951: 	lea	OBJ_SIZE(a0),a0
+00:0026321A 51C9FFE6        	   952: 	dbra	d1,.l
+00:0026321E 47EB001C        	   953: 	lea	28(a3),a3		; [cyc] fall-through
+00:00263222 4E75            	   954: 	rts
+                            	   955: ; ---------------------------------------------------------------------------
+                            	   956: ; EST engine: per-frame update (ARM $55C) and animation-only pass (ARM $1730)
+                            	   957: ; Registers inside the object loop:
+                            	   958: ;   a0 = object, d7 = y scroll offset (GLOB word 7), d6 = slot counter,
+                            	   959: ;   a4 = SHWIN, a5 = HLEV, a3 = cycle accumulator. State routines may use d0-d5, a1, a2, a6.
+                            	   960: ; ---------------------------------------------------------------------------
+                            	   961: 
+                            	   962: ; SPLIT v, field, t1, t2 : v.w = accumulator value (s16)
+                            	   963: ;   field(a0) <- remainder (sign of v), v <- quotient (truncated toward 0)
+                            	   964: 
+                            	   965: ; SPLITV v, vel, acc, t1, t2 : SPLIT with the next frame's velocity added in place
+                            	   966: ;   acc(a0) <- remainder + vel(a0), v <- quotient
+                            	   967: 
+                            	   968: ; SPRXY x, y, ox, oy, t : sprite position words
+                            	   969: 
+                            	   970: ; The object loop accounts for itself: every slot is charged UPD_DEAD up front, a live
+                            	   971: ; slot adds UPD_LIVE-UPD_DEAD (its state routine accounts for itself, rts included), a
+                            	   972: ; slot above state 7 (skipped, as by the firmware) adds UPD_HIGH-UPD_DEAD.
+                            	   973: ;   dead   8 + 10 + 8 + 10                                    = 36
+                            	   974: ;   live   8 + 8 + 8 + 8 + 8 + 4 + 14 + 22 + 8 + 10            = 98
+                            	   975: ;   high   8 + 8 + 8 + 10 + 8 + 10 + 8 + 10                    = 70
+                            	   976: ; plus the entry bra.s (10) and 4 for the last dbra (falls through: 14).
+                            	   977: UPD_DEAD	equ	36
+                            	   978: UPD_LIVE	equ	98
+                            	   979: UPD_HIGH	equ	70
+                            	   980: 
+                            	   981: est_update:
+00:00263224 3E2D229E        	   982: 	move.w	GLOB+14(a5),d7
+00:00263228 41ED0090        	   983: 	lea	POOL(a5),a0
+00:0026322C 7C7F            	   984: 	moveq	#NOBJ-1,d6
+00:0026322E 47EB120E        	   985: 	lea	NOBJ*UPD_DEAD+10+4(a3),a3	; @cyc-adjust
+                            	   986: 	; @cyc-off
+00:00263232 6006            	   987: 	bra.s	.loop			; 10
+00:00263234 47EB0022        	   988: .high:	lea	UPD_HIGH-UPD_DEAD(a3),a3	;  8  @cyc-adjust
+00:00263238 6018            	   989: 	bra.s	.next			; 10
+00:0026323A 3010            	   990: .loop:	move.w	(a0),d0			;  8
+00:0026323C 6714            	   991: 	beq.s	.next			; 10 / 8
+00:0026323E 0C400007        	   992: 	cmpi.w	#7,d0			;  8
+00:00263242 62F0            	   993: 	bhi.s	.high			; 10 / 8
+00:00263244 47EB003E        	   994: 	lea	UPD_LIVE-UPD_DEAD(a3),a3	;  8  @cyc-adjust
+00:00263248 D040            	   995: 	add.w	d0,d0			;  4
+00:0026324A 303B0032        	   996: 	move.w	.tab-2(pc,d0.w),d0	; 14
+00:0026324E 4EBB0030        	   997: 	jsr	.tab(pc,d0.w)		; 22
+00:00263252 41E80044        	   998: .next:	lea	OBJ_SIZE(a0),a0		;  8
+00:00263256 51CEFFE2        	   999: 	dbra	d6,.loop		; 10 / 14
+                            	  1000: 	; @cyc-on
+00:0026325A 4A6D0012        	  1001: 	tst.w	SYS+$12(a5)
+00:0026325E 6700000A        	  1002: 	beq	.t1
+00:00263262 47EB001A        	  1003: 	lea	26(a3),a3		; [cyc] fall-through
+00:00263266 536D0012        	  1004: 	subq.w	#1,SYS+$12(a5)
+                            	  1005: .t1:
+00:0026326A 4A6D0014        	  1006: 	tst.w	SYS+$14(a5)
+00:0026326E 6700000A        	  1007: 	beq	.t2
+00:00263272 47EB001A        	  1008: 	lea	26(a3),a3		; [cyc] fall-through
+00:00263276 536D0014        	  1009: 	subq.w	#1,SYS+$14(a5)
+                            	  1010: .t2:
+00:0026327A 426D0080        	  1011: 	clr.w	SYS+S_BUSY(a5)
+00:0026327E 4E75            	  1012: 	rts
+                            	  1013: .tab:
+00:00263280 079A            	  1014: 	dc.w	st1-.tab, st2-.tab, st3-.tab, st4-.tab, st5-.tab, st6-.tab, st7-.tab
+00:00263282 01A6
+00:00263284 06C6
+00:00263286 0906
+00:00263288 0A98
+00:0026328A 0B8C
+00:0026328C 0BE4
+                            	  1015: 
+                            	  1016: est_animate:
+00:0026328E 41ED0090        	  1017: 	lea	POOL(a5),a0
+                            	  1018: .loop:
+00:00263292 47EB0042        	  1019: 	lea	66(a3),a3		; [cyc] block
+00:00263296 3010            	  1020: 	move.w	(a0),d0
+00:00263298 0C400004        	  1021: 	cmpi.w	#4,d0
+00:0026329C 65000032        	  1022: 	bcs	.next
+00:002632A0 47EB0052        	  1023: 	lea	82(a3),a3		; [cyc] fall-through
+00:002632A4 67000026        	  1024: 	beq	.up
+00:002632A8 47EB001C        	  1025: 	lea	28(a3),a3		; [cyc] fall-through
+00:002632AC 0C400006        	  1026: 	cmpi.w	#6,d0
+00:002632B0 6700001A        	  1027: 	beq	.up
+00:002632B4 47EBFFDE        	  1028: 	lea	-34(a3),a3		; [cyc] fall-through
+00:002632B8 0C400007        	  1029: 	cmpi.w	#7,d0
+00:002632BC 62000012        	  1030: 	bhi	.next
+00:002632C0 47EB0052        	  1031: 	lea	82(a3),a3		; [cyc] fall-through
+00:002632C4 61000022        	  1032: 	bsr	anim_down	; 5, 7
+00:002632C8 60000006        	  1033: 	bra	.next
+                            	  1034: .up:
+00:002632CC 6100004C        	  1035: 	bsr	anim_up	; 4, 6
+                            	  1036: .next:
+00:002632D0 41E80044        	  1037: 	lea	OBJ_SIZE(a0),a0
+00:002632D4 B1FC0081D64C    	  1038: 	cmpa.l	#HLEV+POOL+(NOBJ-1)*OBJ_SIZE,a0
+00:002632DA 6300FFB6        	  1039: 	bls	.loop
+00:002632DE 47EB002A        	  1040: 	lea	42(a3),a3		; [cyc] fall-through
+00:002632E2 426D0080        	  1041: 	clr.w	SYS+S_BUSY(a5)
+00:002632E6 4E75            	  1042: 	rts
+                            	  1043: 
+                            	  1044: ; ---------------------------------------------------------------------------
+                            	  1045: ; animation helpers
+                            	  1046: ; ---------------------------------------------------------------------------
+                            	  1047: anim_down:
+00:002632E8 53680036        	  1048: 	subq.w	#1,O_ACNT(a0)	; counter at 0: it wraps (carry), reload below
+00:002632EC 65000004        	  1049: 	bcs	.cyc_stub142	; @unlikely
+00:002632F0 4E75            	  1050: 	rts
+                            	  1051: .cyc_stub142:
+00:002632F2 47EB00EA        	  1052: 	lea	234(a3),a3		; [cyc] unlikely edge
+00:002632F6 60000002        	  1053: 	bra	anim_down_f
+                            	  1054: anim_down_f:
+00:002632FA 317C00030036    	  1055: 	move.w	#3,O_ACNT(a0)
+00:00263300 30280030        	  1056: 	move.w	O_AFRAME(a0),d0
+00:00263304 3200            	  1057: 	move.w	d0,d1
+00:00263306 5341            	  1058: 	subq.w	#1,d1
+00:00263308 64000008        	  1059: 	bcc	.s
+00:0026330C 47EB000E        	  1060: 	lea	14(a3),a3		; [cyc] fall-through
+00:00263310 720F            	  1061: 	moveq	#$f,d1
+                            	  1062: .s:
+00:00263312 31410030        	  1063: 	move.w	d1,O_AFRAME(a0)
+00:00263316 6000F982        	  1064: 	bra	copy_anim_1800	; frame = old value (d0)
+                            	  1065: 
+                            	  1066: anim_up:
+00:0026331A 53680036        	  1067: 	subq.w	#1,O_ACNT(a0)
+00:0026331E 65000004        	  1068: 	bcs	.cyc_stub147	; @unlikely
+00:00263322 4E75            	  1069: 	rts
+                            	  1070: .cyc_stub147:
+00:00263324 47EB00EE        	  1071: 	lea	238(a3),a3		; [cyc] unlikely edge
+00:00263328 60000002        	  1072: 	bra	.f
+                            	  1073: .f:
+00:0026332C 317C00050036    	  1074: 	move.w	#5,O_ACNT(a0)
+00:00263332 30280030        	  1075: 	move.w	O_AFRAME(a0),d0
+00:00263336 7200            	  1076: 	moveq	#0,d1
+00:00263338 0C400003        	  1077: 	cmpi.w	#3,d0
+00:0026333C 6400000A        	  1078: 	bcc	.s
+00:00263340 47EB0012        	  1079: 	lea	18(a3),a3		; [cyc] fall-through
+00:00263344 3200            	  1080: 	move.w	d0,d1
+00:00263346 5241            	  1081: 	addq.w	#1,d1
+                            	  1082: .s:
+00:00263348 31410030        	  1083: 	move.w	d1,O_AFRAME(a0)
+00:0026334C 6000F94C        	  1084: 	bra	copy_anim_1800
+                            	  1085: 
+                            	  1086: ; dir_anim: if the type has directional sprites, ABASE = P1E + 4*(((ang+4)&$ff)>>3)
+                            	  1087: ; in: d0.w = angle (0..255); clobbers d1
+                            	  1088: dir_anim:
+00:00263350 4A28003F        	  1089: 	tst.b	O_DIRANIM(a0)
+00:00263354 6700001C        	  1090: 	beq	.x
+00:00263358 47EB0046        	  1091: 	lea	70(a3),a3		; [cyc] fall-through
+00:0026335C 3200            	  1092: 	move.w	d0,d1
+00:0026335E 5841            	  1093: 	addq.w	#4,d1
+00:00263360 024100FF        	  1094: 	andi.w	#$ff,d1
+00:00263364 E649            	  1095: 	lsr.w	#3,d1
+00:00263366 D241            	  1096: 	add.w	d1,d1
+00:00263368 D241            	  1097: 	add.w	d1,d1
+00:0026336A D268003C        	  1098: 	add.w	O_P1E(a0),d1
+00:0026336E 3141002C        	  1099: 	move.w	d1,O_ABASE(a0)
+                            	  1100: .x:
+00:00263372 4E75            	  1101: 	rts
                             	  1102: 
-                            	  1103: ; aim: target angle towards player (d2 = 0: GLOB[0..1], else GLOB[2..3])
-                            	  1104: ; from x d4, y d5 -> d0.w (0..255); clobbers d1, d2, a1
-                            	  1105: aim:
-00:0026339A 43ED2290        	  1106: 	lea	GLOB(a5),a1
-00:0026339E 4A42            	  1107: 	tst.w	d2
-00:002633A0 67000008        	  1108: 	beq	.p
-00:002633A4 47EB0012        	  1109: 	lea	18(a3),a3		; [cyc] fall-through
-00:002633A8 5889            	  1110: 	addq.l	#4,a1
-                            	  1111: .p:
-00:002633AA 3019            	  1112: 	move.w	(a1)+,d0
-00:002633AC 9044            	  1113: 	sub.w	d4,d0
-00:002633AE 06400200        	  1114: 	addi.w	#$200,d0
-00:002633B2 E848            	  1115: 	lsr.w	#4,d0	; row (0..$fff)
-00:002633B4 3211            	  1116: 	move.w	(a1),d1
-00:002633B6 9245            	  1117: 	sub.w	d5,d1
-00:002633B8 06410100        	  1118: 	addi.w	#$100,d1
-00:002633BC E649            	  1119: 	lsr.w	#3,d1	; column (0..$1fff)
-00:002633BE 48C0            	  1120: 	ext.l	d0
-00:002633C0 02800000FFFF    	  1121: 	andi.l	#$ffff,d0
-00:002633C6 ED88            	  1122: 	lsl.l	#6,d0
-00:002633C8 02810000FFFF    	  1123: 	andi.l	#$ffff,d1
-00:002633CE D081            	  1124: 	add.l	d1,d0	; index into the table at ARM $2C90
-00:002633D0 0C8000001370    	  1125: 	cmpi.l	#AIMTAB_SIZE,d0	; beyond the internal ROM: MAME reads 0
-00:002633D6 64000016        	  1126: 	bcc	.zero
-00:002633DA 47EB0028        	  1127: 	lea	40(a3),a3		; [cyc] fall-through
-00:002633DE 43F900270400    	  1128: 	lea	AIMTAB,a1
-00:002633E4 10310800        	  1129: 	move.b	(a1,d0.l),d0
-00:002633E8 024000FF        	  1130: 	andi.w	#$ff,d0
-00:002633EC 4E75            	  1131: 	rts
-                            	  1132: .zero:
-00:002633EE 7000            	  1133: 	moveq	#0,d0
-00:002633F0 4E75            	  1134: 	rts
-                            	  1135: 
-                            	  1136: ; ---------------------------------------------------------------------------
-                            	  1137: ; state 2: scripted bullet
-                            	  1138: ; ---------------------------------------------------------------------------
-                            	  1139: st2:
-00:002633F2 47EB01C0        	  1140: 	lea	448(a3),a3		; [cyc] block
-00:002633F6 30280032        	  1141: 	move.w	O_TIMER(a0),d0
-00:002633FA 67000026        	  1142: 	beq	.cyc_stub165	; @unlikely
-                            	  1143: 	; Fast path (instruction still running): st2_timer's work with the velocity added
-                            	  1144: 	; to the remainder while it is in a register (taken back if the bullet dies), and
-                            	  1145: 	; the four bounds as two unsigned ranges: -9 < y < $E8, -9 < x <= $1C7.
-00:002633FE 5340            	  1146: 	subq.w	#1,d0
-00:00263400 31400032        	  1147: 	move.w	d0,O_TIMER(a0)
-00:00263404 38280014        	  1148: 	move.w	O_AX(a0),d4
-00:00263408 3004            	  1149: 	move.w	d4,d0
-00:0026340A 6A00001E        	  1150: 	bpl	.p_9
-00:0026340E 47EB0024        	  1151: 	lea	36(a3),a3		; [cyc] fall-through
-00:00263412 064400FF        	  1152: 	addi.w	#$ff,d4
-00:00263416 3204            	  1153: 	move.w	d4,d1
-00:00263418 0241FF00        	  1154: 	andi.w	#$ff00,d1
-00:0026341C 9041            	  1155: 	sub.w	d1,d0
-00:0026341E 6000000E        	  1156: 	bra	.s_9
-                            	  1157: .cyc_stub165:
-00:00263422 47EB0084        	  1158: 	lea	132(a3),a3		; [cyc] unlikely edge
-00:00263426 600000CC        	  1159: 	bra	st2_script
-                            	  1160: .p_9:
-00:0026342A 024000FF        	  1161: 	andi.w	#$ff,d0
-                            	  1162: .s_9:
-00:0026342E D0680010        	  1163: 	add.w	O_VX(a0),d0
-00:00263432 31400014        	  1164: 	move.w	d0,O_AX(a0)
-00:00263436 E044            	  1165: 	asr.w	#8,d4
-00:00263438 3A280016        	  1166: 	move.w	O_AY(a0),d5
-00:0026343C 3005            	  1167: 	move.w	d5,d0
-00:0026343E 6A000016        	  1168: 	bpl	.p_10
-00:00263442 47EB0024        	  1169: 	lea	36(a3),a3		; [cyc] fall-through
-00:00263446 064500FF        	  1170: 	addi.w	#$ff,d5
-00:0026344A 3205            	  1171: 	move.w	d5,d1
-00:0026344C 0241FF00        	  1172: 	andi.w	#$ff00,d1
-00:00263450 9041            	  1173: 	sub.w	d1,d0
-00:00263452 60000006        	  1174: 	bra	.s_10
-                            	  1175: .p_10:
-00:00263456 024000FF        	  1176: 	andi.w	#$ff,d0
-                            	  1177: .s_10:
-00:0026345A D0680012        	  1178: 	add.w	O_VY(a0),d0
-00:0026345E 31400016        	  1179: 	move.w	d0,O_AY(a0)
-00:00263462 E045            	  1180: 	asr.w	#8,d5
-00:00263464 D8680006        	  1181: 	add.w	O_X(a0),d4	; x
-00:00263468 DA680008        	  1182: 	add.w	O_Y(a0),d5
-00:0026346C DA47            	  1183: 	add.w	d7,d5	; y
-00:0026346E 3005            	  1184: 	move.w	d5,d0
-00:00263470 5040            	  1185: 	addq.w	#8,d0
-00:00263472 0C4000F0        	  1186: 	cmpi.w	#$e8+8,d0
-00:00263476 64000044        	  1187: 	bcc	.cyc_stub172	; @unlikely
-00:0026347A 3004            	  1188: 	move.w	d4,d0
-00:0026347C 5040            	  1189: 	addq.w	#8,d0
-00:0026347E 0C4001D0        	  1190: 	cmpi.w	#$1c8+8,d0
-00:00263482 64000040        	  1191: 	bcc	.cyc_stub173	; @unlikely
-                            	  1192: .on:
-00:00263486 3004            	  1193: 	move.w	d4,d0
-00:00263488 90680040        	  1194: 	sub.w	O_OX(a0),d0
-00:0026348C 024007FF        	  1195: 	andi.w	#$7ff,d0
-00:00263490 00408000        	  1196: 	ori.w	#$8000,d0
-00:00263494 3140001C        	  1197: 	move.w	d0,O_SPRX(a0)
-00:00263498 3005            	  1198: 	move.w	d5,d0
-00:0026349A 90680042        	  1199: 	sub.w	O_OY(a0),d0
-00:0026349E 024003FF        	  1200: 	andi.w	#$3ff,d0
-00:002634A2 00408000        	  1201: 	ori.w	#$8000,d0
-00:002634A6 3140001E        	  1202: 	move.w	d0,O_SPRY(a0)
-00:002634AA 31440006        	  1203: 	move.w	d4,O_X(a0)
-00:002634AE 31450008        	  1204: 	move.w	d5,O_Y(a0)
-00:002634B2 53680036        	  1205: 	subq.w	#1,O_ACNT(a0)	; counter at 0: it wraps (carry), reloaded by st2_frame
-00:002634B6 65000014        	  1206: 	bcs	.cyc_stub174	; @unlikely
-00:002634BA 4E75            	  1207: 	rts
-                            	  1208: .cyc_stub172:
-00:002634BC 47EB000A        	  1209: 	lea	10(a3),a3		; [cyc] unlikely edge
-00:002634C0 60000012        	  1210: 	bra	.off
-                            	  1211: .cyc_stub173:
-00:002634C4 47EB0026        	  1212: 	lea	38(a3),a3		; [cyc] unlikely edge
-00:002634C8 6000000A        	  1213: 	bra	.off
-                            	  1214: .cyc_stub174:
-00:002634CC 47EB00E4        	  1215: 	lea	228(a3),a3		; [cyc] unlikely edge
-00:002634D0 600003F0        	  1216: 	bra	st2_frame
-                            	  1217: .off:
-00:002634D4 4A68002E        	  1218: 	tst.w	O_FLAG(a0)
-00:002634D8 6600FFAC        	  1219: 	bne	.on
-00:002634DC 47EBFFB0        	  1220: 	lea	-80(a3),a3		; [cyc] fall-through
-00:002634E0 30280010        	  1221: 	move.w	O_VX(a0),d0	; dies: the remainder as the firmware leaves it
-00:002634E4 91680014        	  1222: 	sub.w	d0,O_AX(a0)
-00:002634E8 30280012        	  1223: 	move.w	O_VY(a0),d0
-00:002634EC 91680016        	  1224: 	sub.w	d0,O_AY(a0)
-00:002634F0 600000AA        	  1225: 	bra	op_kill
-                            	  1226: st2_script:
-00:002634F4 38280014        	  1227: 	move.w	O_AX(a0),d4
-00:002634F8 3004            	  1228: 	move.w	d4,d0
-00:002634FA 6A000016        	  1229: 	bpl	.p_12
-00:002634FE 47EB0024        	  1230: 	lea	36(a3),a3		; [cyc] fall-through
-00:00263502 064400FF        	  1231: 	addi.w	#$ff,d4	; v < 0: q = (v + 255) >> 8, r = v - (v + 255 & $ff00)
-00:00263506 3204            	  1232: 	move.w	d4,d1
-00:00263508 0241FF00        	  1233: 	andi.w	#$ff00,d1
-00:0026350C 9041            	  1234: 	sub.w	d1,d0
-00:0026350E 60000006        	  1235: 	bra	.s_12
-                            	  1236: .p_12:
-00:00263512 024000FF        	  1237: 	andi.w	#$ff,d0	; v >= 0: q = v >> 8, r = v & $ff
-                            	  1238: .s_12:
-00:00263516 31400014        	  1239: 	move.w	d0,O_AX(a0)
-00:0026351A E044            	  1240: 	asr.w	#8,d4
-00:0026351C 3A280016        	  1241: 	move.w	O_AY(a0),d5
-00:00263520 3005            	  1242: 	move.w	d5,d0
-00:00263522 6A000016        	  1243: 	bpl	.p_13
-00:00263526 47EB0024        	  1244: 	lea	36(a3),a3		; [cyc] fall-through
-00:0026352A 064500FF        	  1245: 	addi.w	#$ff,d5	; v < 0: q = (v + 255) >> 8, r = v - (v + 255 & $ff00)
-00:0026352E 3205            	  1246: 	move.w	d5,d1
-00:00263530 0241FF00        	  1247: 	andi.w	#$ff00,d1
-00:00263534 9041            	  1248: 	sub.w	d1,d0
-00:00263536 60000006        	  1249: 	bra	.s_13
-                            	  1250: .p_13:
-00:0026353A 024000FF        	  1251: 	andi.w	#$ff,d0	; v >= 0: q = v >> 8, r = v & $ff
-                            	  1252: .s_13:
-00:0026353E 31400016        	  1253: 	move.w	d0,O_AY(a0)
-00:00263542 E045            	  1254: 	asr.w	#8,d5
-00:00263544 D8680006        	  1255: 	add.w	O_X(a0),d4	; x
-00:00263548 DA680008        	  1256: 	add.w	O_Y(a0),d5
-00:0026354C DA47            	  1257: 	add.w	d7,d5	; y
-00:0026354E 22680038        	  1258: 	movea.l	O_SCRIPT(a0),a1
-                            	  1259: st2_exec:
-00:00263552 30290002        	  1260: 	move.w	2(a1),d0	; opcode
-00:00263556 0C400013        	  1261: 	cmpi.w	#$13,d0
-00:0026355A 62000010        	  1262: 	bhi	.bad
-00:0026355E 47EBFEE8        	  1263: 	lea	-280(a3),a3		; [cyc] fall-through
-00:00263562 D040            	  1264: 	add.w	d0,d0
-00:00263564 303B000E        	  1265: 	move.w	st2_ops(pc,d0.w),d0
-00:00263568 4EFB000A        	  1266: 	jmp	st2_ops(pc,d0.w)
-                            	  1267: .bad:
-00:0026356C 303CFFFF        	  1268: 	move.w	#$ffff,d0
-00:00263570 600002B6        	  1269: 	bra	st2_timer
-                            	  1270: 
-                            	  1271: st2_ops:
-00:00263574 0028            	  1272: 	dc.w	op_kill-st2_ops, op_vanish-st2_ops, op_flag1-st2_ops, op_flag0-st2_ops
-00:00263576 0038
-00:00263578 0044
-00:0026357A 0052
-00:0026357C 005E            	  1273: 	dc.w	op_loop-st2_ops, op_type-st2_ops, op_spdadd-st2_ops, op_spdsub-st2_ops
-00:0026357E 00B6
-00:00263580 010C
-00:00263582 011C
-00:00263584 012C            	  1274: 	dc.w	op_spdset-st2_ops, op_angadd-st2_ops, op_angsub-st2_ops, op_angset-st2_ops
-00:00263586 014A
-00:00263588 015C
-00:0026358A 016E
-00:0026358C 0196            	  1275: 	dc.w	op_angrnd-st2_ops, op_angspread-st2_ops, op_angspd-st2_ops, op_aimturn-st2_ops
-00:0026358E 01B2
-00:00263590 01F6
-00:00263592 0210
-00:00263594 0254            	  1276: 	dc.w	op_aim-st2_ops, st2_after-st2_ops, st2_after-st2_ops, op_accadd-st2_ops
-00:00263596 027A
-00:00263598 027A
-00:0026359A 0266
-                            	  1277: 
-                            	  1278: op_kill:
-00:0026359C 47EB0044        	  1279: 	lea	68(a3),a3		; [cyc] block
-00:002635A0 536D0002        	  1280: 	subq.w	#1,SYS+$02(a5)
-00:002635A4 536D0006        	  1281: 	subq.w	#1,SYS+$06(a5)
-00:002635A8 4250            	  1282: 	clr.w	(a0)
-00:002635AA 4E75            	  1283: 	rts
-                            	  1284: op_vanish:
-00:002635AC 47EB00EE        	  1285: 	lea	238(a3),a3		; [cyc] block
-00:002635B0 6100F6BA        	  1286: 	bsr	vanish_3a4
-00:002635B4 6000035C        	  1287: 	bra	st3
-                            	  1288: op_flag1:
-00:002635B8 47EB0022        	  1289: 	lea	34(a3),a3		; [cyc] block
-00:002635BC 317C0001002E    	  1290: 	move.w	#1,O_FLAG(a0)
-00:002635C2 6000022A        	  1291: 	bra	st2_after
-                            	  1292: op_flag0:
-00:002635C6 47EB0022        	  1293: 	lea	34(a3),a3		; [cyc] block
-00:002635CA 4268002E        	  1294: 	clr.w	O_FLAG(a0)
-00:002635CE 6000021E        	  1295: 	bra	st2_after
-                            	  1296: op_loop:
-00:002635D2 47EB0200        	  1297: 	lea	512(a3),a3		; [cyc] block
-00:002635D6 3028002A        	  1298: 	move.w	O_CNT(a0),d0
-00:002635DA 6600001A        	  1299: 	bne	.nz
-00:002635DE 47EBFE4A        	  1300: 	lea	-438(a3),a3		; [cyc] fall-through
-00:002635E2 7200            	  1301: 	moveq	#0,d1
-00:002635E4 1211            	  1302: 	move.b	(a1),d1	; ARM byte 1 of the instruction: repeat count
-00:002635E6 3141002A        	  1303: 	move.w	d1,O_CNT(a0)
-00:002635EA 67000202        	  1304: 	beq	st2_after
-00:002635EE 47EB01DC        	  1305: 	lea	476(a3),a3		; [cyc] fall-through
-00:002635F2 60000018        	  1306: 	bra	.jump
-                            	  1307: .nz:
-00:002635F6 5340            	  1308: 	subq.w	#1,d0
-00:002635F8 3140002A        	  1309: 	move.w	d0,O_CNT(a0)
-00:002635FC 6600000E        	  1310: 	bne	.jump
-00:00263600 47EBFFDC        	  1311: 	lea	-36(a3),a3		; [cyc] fall-through
-00:00263604 42680028        	  1312: 	clr.w	O_WAIT(a0)
-00:00263608 60000206        	  1313: 	bra	st2_advance
-                            	  1314: .jump:
-00:0026360C 7200            	  1315: 	moveq	#0,d1
-00:0026360E 32290004        	  1316: 	move.w	4(a1),d1
-00:00263612 E789            	  1317: 	lsl.l	#3,d1
-00:00263614 22680038        	  1318: 	movea.l	O_SCRIPT(a0),a1
-00:00263618 93C1            	  1319: 	suba.l	d1,a1
-00:0026361A 21490038        	  1320: 	move.l	a1,O_SCRIPT(a0)
-00:0026361E 7000            	  1321: 	moveq	#0,d0
-00:00263620 1011            	  1322: 	move.b	(a1),d0
-00:00263622 31400028        	  1323: 	move.w	d0,O_WAIT(a0)
-00:00263626 6000FF2A        	  1324: 	bra	st2_exec
-                            	  1325: op_type:
-00:0026362A 47EB00CE        	  1326: 	lea	206(a3),a3		; [cyc] block
-00:0026362E 7200            	  1327: 	moveq	#0,d1
-00:00263630 32290004        	  1328: 	move.w	4(a1),d1
-00:00263634 E789            	  1329: 	lsl.l	#3,d1
-00:00263636 45F9002885A0    	  1330: 	lea	T_TYPES,a2
-00:0026363C D5C1            	  1331: 	adda.l	d1,a2
-00:0026363E 215A003C        	  1332: 	move.l	(a2)+,O_P1E(a0)
-00:00263642 21520040        	  1333: 	move.l	(a2),O_OX(a0)
-00:00263646 3228003C        	  1334: 	move.w	O_P1E(a0),d1
-00:0026364A 4A28003F        	  1335: 	tst.b	O_DIRANIM(a0)
-00:0026364E 6700001A        	  1336: 	beq	.nd
-00:00263652 47EB003E        	  1337: 	lea	62(a3),a3		; [cyc] fall-through
-00:00263656 7000            	  1338: 	moveq	#0,d0
-00:00263658 10280019        	  1339: 	move.b	O_ANG(a0),d0
-00:0026365C 5840            	  1340: 	addq.w	#4,d0
-00:0026365E 024000FF        	  1341: 	andi.w	#$ff,d0
-00:00263662 E648            	  1342: 	lsr.w	#3,d0
-00:00263664 D040            	  1343: 	add.w	d0,d0
-00:00263666 D040            	  1344: 	add.w	d0,d0
-00:00263668 D240            	  1345: 	add.w	d0,d1
-                            	  1346: .nd:
-00:0026366A 3141002C        	  1347: 	move.w	d1,O_ABASE(a0)
-00:0026366E 7200            	  1348: 	moveq	#0,d1
-00:00263670 1228003E        	  1349: 	move.b	O_NFRAMES(a0),d1
-00:00263674 31410030        	  1350: 	move.w	d1,O_AFRAME(a0)
-00:00263678 42680036        	  1351: 	clr.w	O_ACNT(a0)
-00:0026367C 60000170        	  1352: 	bra	st2_after
-                            	  1353: op_spdadd:
-00:00263680 47EB01D8        	  1354: 	lea	472(a3),a3		; [cyc] block
-00:00263684 32290004        	  1355: 	move.w	4(a1),d1
-00:00263688 D268001A        	  1356: 	add.w	O_SPEED(a0),d1
-00:0026368C 6000001A        	  1357: 	bra	op_spd
-                            	  1358: op_spdsub:
-00:00263690 47EB01D8        	  1359: 	lea	472(a3),a3		; [cyc] block
-00:00263694 3228001A        	  1360: 	move.w	O_SPEED(a0),d1
-00:00263698 92690004        	  1361: 	sub.w	4(a1),d1
-00:0026369C 6000000A        	  1362: 	bra	op_spd
-                            	  1363: op_spdset:
-00:002636A0 47EB01C2        	  1364: 	lea	450(a3),a3		; [cyc] block
-00:002636A4 32290004        	  1365: 	move.w	4(a1),d1
-                            	  1366: op_spd:
-00:002636A8 3141001A        	  1367: 	move.w	d1,O_SPEED(a0)
-00:002636AC 7000            	  1368: 	moveq	#0,d0
-00:002636AE 10280019        	  1369: 	move.b	O_ANG(a0),d0
-00:002636B2 2F09            	  1370: 	move.l	a1,-(sp)
-00:002636B4 6100F4E2        	  1371: 	bsr	set_vel
-00:002636B8 225F            	  1372: 	movea.l	(sp)+,a1
-00:002636BA 60000132        	  1373: 	bra	st2_after
-                            	  1374: op_angadd:
-00:002636BE 47EB0228        	  1375: 	lea	552(a3),a3		; [cyc] block
-00:002636C2 7000            	  1376: 	moveq	#0,d0
-00:002636C4 10280019        	  1377: 	move.b	O_ANG(a0),d0
-00:002636C8 D0690004        	  1378: 	add.w	4(a1),d0
-00:002636CC 6000001C        	  1379: 	bra	op_ang
-                            	  1380: op_angsub:
-00:002636D0 47EB0228        	  1381: 	lea	552(a3),a3		; [cyc] block
-00:002636D4 7000            	  1382: 	moveq	#0,d0
-00:002636D6 10280019        	  1383: 	move.b	O_ANG(a0),d0
-00:002636DA 90690004        	  1384: 	sub.w	4(a1),d0
-00:002636DE 6000000A        	  1385: 	bra	op_ang
-                            	  1386: op_angset:
-00:002636E2 47EB020E        	  1387: 	lea	526(a3),a3		; [cyc] block
-00:002636E6 30290004        	  1388: 	move.w	4(a1),d0
-                            	  1389: op_ang:
-00:002636EA 024000FF        	  1390: 	andi.w	#$ff,d0
-00:002636EE 11400019        	  1391: 	move.b	d0,O_ANG(a0)
-00:002636F2 3228001A        	  1392: 	move.w	O_SPEED(a0),d1
-00:002636F6 2F09            	  1393: 	move.l	a1,-(sp)
-00:002636F8 3F00            	  1394: 	move.w	d0,-(sp)
-00:002636FA 6100F49C        	  1395: 	bsr	set_vel
-00:002636FE 301F            	  1396: 	move.w	(sp)+,d0
-00:00263700 6100FC1A        	  1397: 	bsr	dir_anim
-00:00263704 225F            	  1398: 	movea.l	(sp)+,a1
-00:00263706 600000E6        	  1399: 	bra	st2_after
-                            	  1400: op_angrnd:
-00:0026370A 47EB034A        	  1401: 	lea	842(a3),a3		; [cyc] block
-00:0026370E 2F09            	  1402: 	move.l	a1,-(sp)
-00:00263710 6100FC2E        	  1403: 	bsr	rng
-00:00263714 2257            	  1404: 	movea.l	(sp),a1
-00:00263716 32290006        	  1405: 	move.w	6(a1),d1
-00:0026371A 5341            	  1406: 	subq.w	#1,d1
-00:0026371C C041            	  1407: 	and.w	d1,d0
-00:0026371E D0690004        	  1408: 	add.w	4(a1),d0
-00:00263722 60000028        	  1409: 	bra	op_ang_saved
-                            	  1410: op_angspread:
-00:00263726 47EB036C        	  1411: 	lea	876(a3),a3		; [cyc] block
-00:0026372A 32290006        	  1412: 	move.w	6(a1),d1
-00:0026372E E249            	  1413: 	lsr.w	#1,d1
-00:00263730 93280019        	  1414: 	sub.b	d1,O_ANG(a0)
-00:00263734 2F09            	  1415: 	move.l	a1,-(sp)
-00:00263736 6100FC08        	  1416: 	bsr	rng
-00:0026373A 2257            	  1417: 	movea.l	(sp),a1
-00:0026373C 32290006        	  1418: 	move.w	6(a1),d1
-00:00263740 5341            	  1419: 	subq.w	#1,d1
-00:00263742 C041            	  1420: 	and.w	d1,d0
-00:00263744 7200            	  1421: 	moveq	#0,d1
-00:00263746 12280019        	  1422: 	move.b	O_ANG(a0),d1
-00:0026374A D041            	  1423: 	add.w	d1,d0
-                            	  1424: op_ang_saved:
-00:0026374C 024000FF        	  1425: 	andi.w	#$ff,d0
-00:00263750 11400019        	  1426: 	move.b	d0,O_ANG(a0)
-00:00263754 3228001A        	  1427: 	move.w	O_SPEED(a0),d1
-00:00263758 3F00            	  1428: 	move.w	d0,-(sp)
-00:0026375A 6100F43C        	  1429: 	bsr	set_vel
-00:0026375E 301F            	  1430: 	move.w	(sp)+,d0
-00:00263760 6100FBBA        	  1431: 	bsr	dir_anim
-00:00263764 225F            	  1432: 	movea.l	(sp)+,a1
-00:00263766 60000086        	  1433: 	bra	st2_after
-                            	  1434: op_angspd:
-00:0026376A 47EB0244        	  1435: 	lea	580(a3),a3		; [cyc] block
-00:0026376E 116900070019    	  1436: 	move.b	7(a1),O_ANG(a0)	; low byte of a2
-00:00263774 31690004001A    	  1437: 	move.w	4(a1),O_SPEED(a0)
-00:0026377A 7000            	  1438: 	moveq	#0,d0
-00:0026377C 10280019        	  1439: 	move.b	O_ANG(a0),d0
-00:00263780 6000FF68        	  1440: 	bra	op_ang
-                            	  1441: op_aimturn:
-00:00263784 47EB0132        	  1442: 	lea	306(a3),a3		; [cyc] block
-00:00263788 2F09            	  1443: 	move.l	a1,-(sp)
-00:0026378A 34290004        	  1444: 	move.w	4(a1),d2
-00:0026378E 6100FC0A        	  1445: 	bsr	aim	; d0 = target
-00:00263792 2257            	  1446: 	movea.l	(sp),a1
-00:00263794 7200            	  1447: 	moveq	#0,d1
-00:00263796 12280019        	  1448: 	move.b	O_ANG(a0),d1	; current
-00:0026379A B041            	  1449: 	cmp.w	d1,d0
-00:0026379C 67000024        	  1450: 	beq	.same
-00:002637A0 47EB021E        	  1451: 	lea	542(a3),a3		; [cyc] fall-through
-00:002637A4 3400            	  1452: 	move.w	d0,d2
-00:002637A6 9441            	  1453: 	sub.w	d1,d2	; target - current
-00:002637A8 7000            	  1454: 	moveq	#0,d0
-00:002637AA 10290007        	  1455: 	move.b	7(a1),d0	; step = a2 & $ff
-00:002637AE 0C42007F        	  1456: 	cmpi.w	#$7f,d2
-00:002637B2 6F000008        	  1457: 	ble	.pos
-00:002637B6 47EB000E        	  1458: 	lea	14(a3),a3		; [cyc] fall-through
-00:002637BA 4440            	  1459: 	neg.w	d0
-                            	  1460: .pos:
-00:002637BC D041            	  1461: 	add.w	d1,d0
-00:002637BE 6000FF8C        	  1462: 	bra	op_ang_saved
-                            	  1463: .same:
-00:002637C2 588F            	  1464: 	addq.l	#4,sp
-00:002637C4 60000028        	  1465: 	bra	st2_after
-                            	  1466: op_aim:
-00:002637C8 47EB02EE        	  1467: 	lea	750(a3),a3		; [cyc] block
-00:002637CC 2F09            	  1468: 	move.l	a1,-(sp)
-00:002637CE 34290004        	  1469: 	move.w	4(a1),d2
-00:002637D2 6100FBC6        	  1470: 	bsr	aim
-00:002637D6 6000FF74        	  1471: 	bra	op_ang_saved
-                            	  1472: op_accadd:
-00:002637DA 47EB0040        	  1473: 	lea	64(a3),a3		; [cyc] block
-00:002637DE 30290004        	  1474: 	move.w	4(a1),d0
-00:002637E2 D1680014        	  1475: 	add.w	d0,O_AX(a0)
-00:002637E6 30290006        	  1476: 	move.w	6(a1),d0
-00:002637EA D1680016        	  1477: 	add.w	d0,O_AY(a0)
-                            	  1478: 	; fall through
-                            	  1479: 
-                            	  1480: ; instruction finished: repeat it (wait count) or step to the next one
-                            	  1481: st2_after:
-00:002637EE 47EB019E        	  1482: 	lea	414(a3),a3		; [cyc] block
-00:002637F2 4A680028        	  1483: 	tst.w	O_WAIT(a0)
-00:002637F6 67000018        	  1484: 	beq	st2_advance
-00:002637FA 47EBFFF4        	  1485: 	lea	-12(a3),a3		; [cyc] fall-through
-00:002637FE 53680028        	  1486: 	subq.w	#1,O_WAIT(a0)
-00:00263802 22680038        	  1487: 	movea.l	O_SCRIPT(a0),a1
-00:00263806 7000            	  1488: 	moveq	#0,d0
-00:00263808 10290001        	  1489: 	move.b	1(a1),d0	; ARM byte 0: duration
-00:0026380C 6000001A        	  1490: 	bra	st2_timer
-                            	  1491: st2_advance:
-00:00263810 22680038        	  1492: 	movea.l	O_SCRIPT(a0),a1
-00:00263814 7000            	  1493: 	moveq	#0,d0
-00:00263816 10290008        	  1494: 	move.b	8(a1),d0	; next instruction's repeat count (ARM byte 9)
-00:0026381A 31400028        	  1495: 	move.w	d0,O_WAIT(a0)
-00:0026381E 5089            	  1496: 	addq.l	#8,a1
-00:00263820 21490038        	  1497: 	move.l	a1,O_SCRIPT(a0)
-00:00263824 10290001        	  1498: 	move.b	1(a1),d0	; its duration
-                            	  1499: st2_timer:
-00:00263828 31400032        	  1500: 	move.w	d0,O_TIMER(a0)
-00:0026382C 0C45FFF7        	  1501: 	cmpi.w	#-9,d5
-00:00263830 6F000060        	  1502: 	ble	.cyc_stub223	; @unlikely
-00:00263834 0C4500E8        	  1503: 	cmpi.w	#$e8,d5
-00:00263838 6C000060        	  1504: 	bge	.cyc_stub224	; @unlikely
-00:0026383C 0C44FFF7        	  1505: 	cmpi.w	#-9,d4
-00:00263840 6F000070        	  1506: 	ble	.off	; @unlikely
-00:00263844 0C4401C7        	  1507: 	cmpi.w	#$1c7,d4
-00:00263848 6E000058        	  1508: 	bgt	.cyc_stub226	; @unlikely
-                            	  1509: .on:
-00:0026384C 3004            	  1510: 	move.w	d4,d0
-00:0026384E 90680040        	  1511: 	sub.w	O_OX(a0),d0
-00:00263852 024007FF        	  1512: 	andi.w	#$7ff,d0
-00:00263856 00408000        	  1513: 	ori.w	#$8000,d0
-00:0026385A 3140001C        	  1514: 	move.w	d0,O_SPRX(a0)
-00:0026385E 3005            	  1515: 	move.w	d5,d0
-00:00263860 90680042        	  1516: 	sub.w	O_OY(a0),d0
-00:00263864 024003FF        	  1517: 	andi.w	#$3ff,d0
-00:00263868 00408000        	  1518: 	ori.w	#$8000,d0
-00:0026386C 3140001E        	  1519: 	move.w	d0,O_SPRY(a0)
-00:00263870 31440006        	  1520: 	move.w	d4,O_X(a0)
-00:00263874 31450008        	  1521: 	move.w	d5,O_Y(a0)
-00:00263878 30280010        	  1522: 	move.w	O_VX(a0),d0
-00:0026387C D1680014        	  1523: 	add.w	d0,O_AX(a0)
-00:00263880 30280012        	  1524: 	move.w	O_VY(a0),d0
-00:00263884 D1680016        	  1525: 	add.w	d0,O_AY(a0)
-00:00263888 53680036        	  1526: 	subq.w	#1,O_ACNT(a0)
-00:0026388C 6500001C        	  1527: 	bcs	.cyc_stub227	; @unlikely
-00:00263890 4E75            	  1528: 	rts
-                            	  1529: .cyc_stub223:
-00:00263892 47EBFFEA        	  1530: 	lea	-22(a3),a3		; [cyc] unlikely edge
-00:00263896 6000001A        	  1531: 	bra	.off
-                            	  1532: .cyc_stub224:
-00:0026389A 47EBFFFE        	  1533: 	lea	-2(a3),a3		; [cyc] unlikely edge
-00:0026389E 60000012        	  1534: 	bra	.off
-                            	  1535: .cyc_stub226:
-00:002638A2 47EB0026        	  1536: 	lea	38(a3),a3		; [cyc] unlikely edge
-00:002638A6 6000000A        	  1537: 	bra	.off
-                            	  1538: .cyc_stub227:
-00:002638AA 47EB00E4        	  1539: 	lea	228(a3),a3		; [cyc] unlikely edge
-00:002638AE 60000012        	  1540: 	bra	st2_frame
-                            	  1541: .off:
-00:002638B2 4A68002E        	  1542: 	tst.w	O_FLAG(a0)
-00:002638B6 6600FF94        	  1543: 	bne	.on
-00:002638BA 47EBFF40        	  1544: 	lea	-192(a3),a3		; [cyc] fall-through
-00:002638BE 6000FCDC        	  1545: 	bra	op_kill
-                            	  1546: st2_frame:
-00:002638C2 316800340036    	  1547: 	move.w	O_APER(a0),O_ACNT(a0)
-00:002638C8 30280030        	  1548: 	move.w	O_AFRAME(a0),d0
-00:002638CC 3200            	  1549: 	move.w	d0,d1
-00:002638CE 5341            	  1550: 	subq.w	#1,d1
-00:002638D0 6400000C        	  1551: 	bcc	.fs
-00:002638D4 47EB001A        	  1552: 	lea	26(a3),a3		; [cyc] fall-through
-00:002638D8 7200            	  1553: 	moveq	#0,d1
-00:002638DA 1228003E        	  1554: 	move.b	O_NFRAMES(a0),d1
-                            	  1555: .fs:
-00:002638DE 31410030        	  1556: 	move.w	d1,O_AFRAME(a0)
-                            	  1557: 	; entry = T_1714 + 8*ABASE - 8*frame (32-bit)
-00:002638E2 7200            	  1558: 	moveq	#0,d1
-00:002638E4 3228002C        	  1559: 	move.w	O_ABASE(a0),d1
-00:002638E8 02800000FFFF    	  1560: 	andi.l	#$ffff,d0
-00:002638EE 9280            	  1561: 	sub.l	d0,d1
-00:002638F0 E789            	  1562: 	lsl.l	#3,d1
-00:002638F2 43F90028010C    	  1563: 	lea	T_1714,a1
-00:002638F8 D3C1            	  1564: 	adda.l	d1,a1
-00:002638FA 3019            	  1565: 	move.w	(a1)+,d0
-00:002638FC 0240E0FF        	  1566: 	andi.w	#$e0ff,d0
-00:00263900 00401700        	  1567: 	ori.w	#$1700,d0
-00:00263904 31400020        	  1568: 	move.w	d0,O_SPR(a0)
-00:00263908 31590022        	  1569: 	move.w	(a1)+,O_SPR+2(a0)
-00:0026390C 21510024        	  1570: 	move.l	(a1),O_SPR+4(a0)
-00:00263910 4E75            	  1571: 	rts
-                            	  1572: 
-                            	  1573: ; ---------------------------------------------------------------------------
-                            	  1574: ; state 3: vanish
-                            	  1575: ; ---------------------------------------------------------------------------
-                            	  1576: st3:
-00:00263912 47EB01F4        	  1577: 	lea	500(a3),a3		; [cyc] block
-00:00263916 36280028        	  1578: 	move.w	O_WAIT(a0),d3
-00:0026391A 66000012        	  1579: 	bne	.w
-00:0026391E 47EBFE70        	  1580: 	lea	-400(a3),a3		; [cyc] fall-through
-00:00263922 536D0002        	  1581: 	subq.w	#1,SYS+$02(a5)	; $37C
-00:00263926 536D0008        	  1582: 	subq.w	#1,SYS+$08(a5)
-00:0026392A 4250            	  1583: 	clr.w	(a0)
-00:0026392C 4E75            	  1584: 	rts
-                            	  1585: .w:
-00:0026392E 5343            	  1586: 	subq.w	#1,d3
-00:00263930 31430028        	  1587: 	move.w	d3,O_WAIT(a0)
-00:00263934 38280014        	  1588: 	move.w	O_AX(a0),d4
-00:00263938 3004            	  1589: 	move.w	d4,d0
-00:0026393A 6A000016        	  1590: 	bpl	.p_15
-00:0026393E 47EB0024        	  1591: 	lea	36(a3),a3		; [cyc] fall-through
-00:00263942 064400FF        	  1592: 	addi.w	#$ff,d4	; v < 0: q = (v + 255) >> 8, r = v - (v + 255 & $ff00)
-00:00263946 3204            	  1593: 	move.w	d4,d1
-00:00263948 0241FF00        	  1594: 	andi.w	#$ff00,d1
-00:0026394C 9041            	  1595: 	sub.w	d1,d0
-00:0026394E 60000006        	  1596: 	bra	.s_15
-                            	  1597: .p_15:
-00:00263952 024000FF        	  1598: 	andi.w	#$ff,d0	; v >= 0: q = v >> 8, r = v & $ff
-                            	  1599: .s_15:
-00:00263956 31400014        	  1600: 	move.w	d0,O_AX(a0)
-00:0026395A E044            	  1601: 	asr.w	#8,d4
-00:0026395C 3A280016        	  1602: 	move.w	O_AY(a0),d5
-00:00263960 3005            	  1603: 	move.w	d5,d0
-00:00263962 6A000016        	  1604: 	bpl	.p_16
-00:00263966 47EB0024        	  1605: 	lea	36(a3),a3		; [cyc] fall-through
-00:0026396A 064500FF        	  1606: 	addi.w	#$ff,d5	; v < 0: q = (v + 255) >> 8, r = v - (v + 255 & $ff00)
-00:0026396E 3205            	  1607: 	move.w	d5,d1
-00:00263970 0241FF00        	  1608: 	andi.w	#$ff00,d1
-00:00263974 9041            	  1609: 	sub.w	d1,d0
-00:00263976 60000006        	  1610: 	bra	.s_16
-                            	  1611: .p_16:
-00:0026397A 024000FF        	  1612: 	andi.w	#$ff,d0	; v >= 0: q = v >> 8, r = v & $ff
-                            	  1613: .s_16:
-00:0026397E 31400016        	  1614: 	move.w	d0,O_AY(a0)
-00:00263982 E045            	  1615: 	asr.w	#8,d5
-00:00263984 D8680006        	  1616: 	add.w	O_X(a0),d4
-00:00263988 DA680008        	  1617: 	add.w	O_Y(a0),d5
-00:0026398C DA47            	  1618: 	add.w	d7,d5
-00:0026398E 43F900280134    	  1619: 	lea	T_VANISH,a1	; ARM $08000134 - 8*wait
-00:00263994 7200            	  1620: 	moveq	#0,d1
-00:00263996 3203            	  1621: 	move.w	d3,d1
-00:00263998 E789            	  1622: 	lsl.l	#3,d1
-00:0026399A 93C1            	  1623: 	suba.l	d1,a1
-00:0026399C 21590020        	  1624: 	move.l	(a1)+,O_SPR(a0)
-00:002639A0 21510024        	  1625: 	move.l	(a1),O_SPR+4(a0)
-00:002639A4 0268E0FF0020    	  1626: 	andi.w	#$e0ff,O_SPR(a0)
-00:002639AA 006817000020    	  1627: 	ori.w	#$1700,O_SPR(a0)
-00:002639B0 3004            	  1628: 	move.w	d4,d0
-00:002639B2 024007FF        	  1629: 	andi.w	#$7ff,d0
-00:002639B6 00408000        	  1630: 	ori.w	#$8000,d0
-00:002639BA 3140001C        	  1631: 	move.w	d0,O_SPRX(a0)
-00:002639BE 3005            	  1632: 	move.w	d5,d0
-00:002639C0 024003FF        	  1633: 	andi.w	#$3ff,d0
-00:002639C4 00408000        	  1634: 	ori.w	#$8000,d0
-00:002639C8 3140001E        	  1635: 	move.w	d0,O_SPRY(a0)
-00:002639CC 31440006        	  1636: 	move.w	d4,O_X(a0)
-00:002639D0 31450008        	  1637: 	move.w	d5,O_Y(a0)
-00:002639D4 30280010        	  1638: 	move.w	O_VX(a0),d0
-00:002639D8 D1680014        	  1639: 	add.w	d0,O_AX(a0)
-00:002639DC 30280012        	  1640: 	move.w	O_VY(a0),d0
-00:002639E0 D1680016        	  1641: 	add.w	d0,O_AY(a0)
-00:002639E4 4E75            	  1642: 	rts
-                            	  1643: 
-                            	  1644: ; ---------------------------------------------------------------------------
-                            	  1645: ; state 1: appear
-                            	  1646: ; ---------------------------------------------------------------------------
-                            	  1647: st1:
-00:002639E6 47EB00EE        	  1648: 	lea	238(a3),a3		; [cyc] block
-00:002639EA 30280032        	  1649: 	move.w	O_TIMER(a0),d0
-00:002639EE 670000DE        	  1650: 	beq	.go
-00:002639F2 47EB0148        	  1651: 	lea	328(a3),a3		; [cyc] fall-through
-00:002639F6 5340            	  1652: 	subq.w	#1,d0
-00:002639F8 31400032        	  1653: 	move.w	d0,O_TIMER(a0)
-00:002639FC 4A680028        	  1654: 	tst.w	O_WAIT(a0)
-00:00263A00 66000010        	  1655: 	bne	.w1
-00:00263A04 47EB0014        	  1656: 	lea	20(a3),a3		; [cyc] fall-through
-00:00263A08 317C00010028    	  1657: 	move.w	#1,O_WAIT(a0)
-00:00263A0E 60000006        	  1658: 	bra	.w2
-                            	  1659: .w1:
-00:00263A12 DF680008        	  1660: 	add.w	d7,O_Y(a0)
-                            	  1661: .w2:
-00:00263A16 30280004        	  1662: 	move.w	O_SUB(a0),d0
-00:00263A1A 6600001A        	  1663: 	bne	.sub
-00:00263A1E 47EBFEAC        	  1664: 	lea	-340(a3),a3		; [cyc] fall-through
-00:00263A22 43F900280100    	  1665: 	lea	T_1718,a1
-00:00263A28 2159001C        	  1666: 	move.l	(a1)+,O_SPRX(a0)
-00:00263A2C 21590020        	  1667: 	move.l	(a1)+,O_SPRX+4(a0)
-00:00263A30 21510024        	  1668: 	move.l	(a1),O_SPRX+8(a0)
-00:00263A34 4E75            	  1669: 	rts
-                            	  1670: .sub:
-00:00263A36 7200            	  1671: 	moveq	#0,d1
-00:00263A38 3228002A        	  1672: 	move.w	O_CNT(a0),d1
-00:00263A3C 0C400002        	  1673: 	cmpi.w	#2,d0
-00:00263A40 6600000E        	  1674: 	bne	.dir
-00:00263A44 47EBFF92        	  1675: 	lea	-110(a3),a3		; [cyc] fall-through
-00:00263A48 5268002A        	  1676: 	addq.w	#1,O_CNT(a0)
-00:00263A4C 60000030        	  1677: 	bra	.idx
-                            	  1678: .dir:
-00:00263A50 342D0016        	  1679: 	move.w	SYS+$16(a5),d2
-00:00263A54 5242            	  1680: 	addq.w	#1,d2
-00:00263A56 3B420016        	  1681: 	move.w	d2,SYS+$16(a5)
-00:00263A5A EF89            	  1682: 	lsl.l	#7,d1
-00:00263A5C 7000            	  1683: 	moveq	#0,d0
-00:00263A5E 10280019        	  1684: 	move.b	O_ANG(a0),d0
-00:00263A62 5840            	  1685: 	addq.w	#4,d0
-00:00263A64 024000FF        	  1686: 	andi.w	#$ff,d0
-00:00263A68 E648            	  1687: 	lsr.w	#3,d0
-00:00263A6A D040            	  1688: 	add.w	d0,d0
-00:00263A6C D040            	  1689: 	add.w	d0,d0
-00:00263A6E D280            	  1690: 	add.l	d0,d1
-00:00263A70 028200000003    	  1691: 	andi.l	#3,d2
-00:00263A76 D282            	  1692: 	add.l	d2,d1
-00:00263A78 02810000FFFF    	  1693: 	andi.l	#$ffff,d1
-                            	  1694: .idx:
-00:00263A7E 2001            	  1695: 	move.l	d1,d0
-00:00263A80 E788            	  1696: 	lsl.l	#3,d0
-00:00263A82 43F900286904    	  1697: 	lea	T_1720,a1
-00:00263A88 D3C0            	  1698: 	adda.l	d0,a1
-00:00263A8A 21590020        	  1699: 	move.l	(a1)+,O_SPR(a0)
-00:00263A8E 21510024        	  1700: 	move.l	(a1),O_SPR+4(a0)
-00:00263A92 0268E0FF0020    	  1701: 	andi.w	#$e0ff,O_SPR(a0)
-00:00263A98 006817000020    	  1702: 	ori.w	#$1700,O_SPR(a0)
-00:00263A9E E589            	  1703: 	lsl.l	#2,d1
-00:00263AA0 43F900287C2C    	  1704: 	lea	T_171C,a1
-00:00263AA6 D3C1            	  1705: 	adda.l	d1,a1
-00:00263AA8 30280006        	  1706: 	move.w	O_X(a0),d0
-00:00263AAC 9059            	  1707: 	sub.w	(a1)+,d0
-00:00263AAE 024007FF        	  1708: 	andi.w	#$7ff,d0
-00:00263AB2 00408000        	  1709: 	ori.w	#$8000,d0
-00:00263AB6 3140001C        	  1710: 	move.w	d0,O_SPRX(a0)
-00:00263ABA 30280008        	  1711: 	move.w	O_Y(a0),d0
-00:00263ABE 9051            	  1712: 	sub.w	(a1),d0
-00:00263AC0 024003FF        	  1713: 	andi.w	#$3ff,d0
-00:00263AC4 00408000        	  1714: 	ori.w	#$8000,d0
-00:00263AC8 3140001E        	  1715: 	move.w	d0,O_SPRY(a0)
-00:00263ACC 4E75            	  1716: 	rts
-                            	  1717: .go:
-00:00263ACE 4A680028        	  1718: 	tst.w	O_WAIT(a0)
-00:00263AD2 6600000A        	  1719: 	bne	.g1
-00:00263AD6 47EB001A        	  1720: 	lea	26(a3),a3		; [cyc] fall-through
-00:00263ADA 9F680008        	  1721: 	sub.w	d7,O_Y(a0)
-                            	  1722: .g1:
-00:00263ADE 4A6D0014        	  1723: 	tst.w	SYS+$14(a5)
-00:00263AE2 6700000E        	  1724: 	beq	.g2
-00:00263AE6 47EB004C        	  1725: 	lea	76(a3),a3		; [cyc] fall-through
-00:00263AEA 6100F18C        	  1726: 	bsr	vanish_40c
-00:00263AEE 6000FE22        	  1727: 	bra	st3
-                            	  1728: .g2:
-00:00263AF2 20280038        	  1729: 	move.l	O_SCRIPT(a0),d0
-00:00263AF6 66000010        	  1730: 	bne	.g3
-00:00263AFA 47EBFFE0        	  1731: 	lea	-32(a3),a3		; [cyc] fall-through
-00:00263AFE 317CFFFF0032    	  1732: 	move.w	#$ffff,O_TIMER(a0)
-00:00263B04 60000018        	  1733: 	bra	.g4
-                            	  1734: .g3:
-00:00263B08 2240            	  1735: 	movea.l	d0,a1
-00:00263B0A 7000            	  1736: 	moveq	#0,d0
-00:00263B0C 1011            	  1737: 	move.b	(a1),d0	; ARM byte 1: repeat
-00:00263B0E 31400028        	  1738: 	move.w	d0,O_WAIT(a0)
-00:00263B12 10290001        	  1739: 	move.b	1(a1),d0	; ARM byte 0: duration
-00:00263B16 31400032        	  1740: 	move.w	d0,O_TIMER(a0)
-00:00263B1A 4268002A        	  1741: 	clr.w	O_CNT(a0)
-                            	  1742: .g4:
-00:00263B1E 42680004        	  1743: 	clr.w	O_SUB(a0)
-00:00263B22 30BC0002        	  1744: 	move.w	#2,(a0)
-00:00263B26 526D0006        	  1745: 	addq.w	#1,SYS+$06(a5)
-00:00263B2A 536D0004        	  1746: 	subq.w	#1,SYS+$04(a5)
-00:00263B2E 6000F8C2        	  1747: 	bra	st2
-                            	  1748: 
-                            	  1749: ; ---------------------------------------------------------------------------
-                            	  1750: ; state 4: bouncing debris
-                            	  1751: ; ---------------------------------------------------------------------------
-                            	  1752: st4_vel:
-00:00263B32 53680032        	  1753: 	subq.w	#1,O_TIMER(a0)
-00:00263B36 302D0086        	  1754: 	move.w	SYS+S_CNT86(a5),d0
-00:00263B3A 5240            	  1755: 	addq.w	#1,d0
-00:00263B3C 3B400086        	  1756: 	move.w	d0,SYS+S_CNT86(a5)
-00:00263B40 02400003        	  1757: 	andi.w	#3,d0
-00:00263B44 D040            	  1758: 	add.w	d0,d0
-00:00263B46 D040            	  1759: 	add.w	d0,d0
-00:00263B48 43F900287BEC    	  1760: 	lea	T_172C,a1
-00:00263B4E D2C0            	  1761: 	adda.w	d0,a1
-00:00263B50 4E75            	  1762: 	rts
-                            	  1763: 
-                            	  1764: st4:
-00:00263B52 47EB0166        	  1765: 	lea	358(a3),a3		; [cyc] block
-00:00263B56 34280010        	  1766: 	move.w	O_VX(a0),d2	; vx
-00:00263B5A 36280012        	  1767: 	move.w	O_VY(a0),d3	; vy
-00:00263B5E 38280014        	  1768: 	move.w	O_AX(a0),d4
-00:00263B62 D842            	  1769: 	add.w	d2,d4
-00:00263B64 3004            	  1770: 	move.w	d4,d0
-00:00263B66 6A000016        	  1771: 	bpl	.p_17
-00:00263B6A 47EB0024        	  1772: 	lea	36(a3),a3		; [cyc] fall-through
-00:00263B6E 064400FF        	  1773: 	addi.w	#$ff,d4	; v < 0: q = (v + 255) >> 8, r = v - (v + 255 & $ff00)
-00:00263B72 3204            	  1774: 	move.w	d4,d1
-00:00263B74 0241FF00        	  1775: 	andi.w	#$ff00,d1
-00:00263B78 9041            	  1776: 	sub.w	d1,d0
-00:00263B7A 60000006        	  1777: 	bra	.s_17
-                            	  1778: .p_17:
-00:00263B7E 024000FF        	  1779: 	andi.w	#$ff,d0	; v >= 0: q = v >> 8, r = v & $ff
-                            	  1780: .s_17:
-00:00263B82 31400014        	  1781: 	move.w	d0,O_AX(a0)
-00:00263B86 E044            	  1782: 	asr.w	#8,d4
-00:00263B88 3A280016        	  1783: 	move.w	O_AY(a0),d5
-00:00263B8C DA43            	  1784: 	add.w	d3,d5
-00:00263B8E 3005            	  1785: 	move.w	d5,d0
-00:00263B90 6A000016        	  1786: 	bpl	.p_18
-00:00263B94 47EB0024        	  1787: 	lea	36(a3),a3		; [cyc] fall-through
-00:00263B98 064500FF        	  1788: 	addi.w	#$ff,d5	; v < 0: q = (v + 255) >> 8, r = v - (v + 255 & $ff00)
-00:00263B9C 3205            	  1789: 	move.w	d5,d1
-00:00263B9E 0241FF00        	  1790: 	andi.w	#$ff00,d1
-00:00263BA2 9041            	  1791: 	sub.w	d1,d0
-00:00263BA4 60000006        	  1792: 	bra	.s_18
-                            	  1793: .p_18:
-00:00263BA8 024000FF        	  1794: 	andi.w	#$ff,d0	; v >= 0: q = v >> 8, r = v & $ff
-                            	  1795: .s_18:
-00:00263BAC 31400016        	  1796: 	move.w	d0,O_AY(a0)
-00:00263BB0 E045            	  1797: 	asr.w	#8,d5
-00:00263BB2 D8680006        	  1798: 	add.w	O_X(a0),d4
-00:00263BB6 31440006        	  1799: 	move.w	d4,O_X(a0)	; x
-00:00263BBA DA680008        	  1800: 	add.w	O_Y(a0),d5
-00:00263BBE DA47            	  1801: 	add.w	d7,d5
-00:00263BC0 31450008        	  1802: 	move.w	d5,O_Y(a0)	; y
-00:00263BC4 4A680032        	  1803: 	tst.w	O_TIMER(a0)
-00:00263BC8 67000096        	  1804: 	beq	.nob
-00:00263BCC 47EB0064        	  1805: 	lea	100(a3),a3		; [cyc] fall-through
-00:00263BD0 4A42            	  1806: 	tst.w	d2
-00:00263BD2 6E000026        	  1807: 	bgt	.right
-00:00263BD6 47EB000A        	  1808: 	lea	10(a3),a3		; [cyc] fall-through
-00:00263BDA 0C44000E        	  1809: 	cmpi.w	#$e,d4
-00:00263BDE 6E00003A        	  1810: 	bgt	.vert
-00:00263BE2 47EB008E        	  1811: 	lea	142(a3),a3		; [cyc] fall-through
-00:00263BE6 6100FF4A        	  1812: 	bsr	st4_vel	; left edge
-00:00263BEA 31590010        	  1813: 	move.w	(a1)+,O_VX(a0)
-00:00263BEE 3011            	  1814: 	move.w	(a1),d0
-00:00263BF0 4440            	  1815: 	neg.w	d0
-00:00263BF2 31400012        	  1816: 	move.w	d0,O_VY(a0)
-00:00263BF6 600000C4        	  1817: 	bra	.draw
-                            	  1818: .right:
-00:00263BFA 0C4401B2        	  1819: 	cmpi.w	#$1b2,d4
-00:00263BFE 6D00001A        	  1820: 	blt	.vert
-00:00263C02 47EB008E        	  1821: 	lea	142(a3),a3		; [cyc] fall-through
-00:00263C06 6100FF2A        	  1822: 	bsr	st4_vel	; right edge
-00:00263C0A 3019            	  1823: 	move.w	(a1)+,d0
-00:00263C0C 4440            	  1824: 	neg.w	d0
-00:00263C0E 31400010        	  1825: 	move.w	d0,O_VX(a0)
-00:00263C12 31510012        	  1826: 	move.w	(a1),O_VY(a0)
-00:00263C16 600000A4        	  1827: 	bra	.draw
-                            	  1828: .vert:
-00:00263C1A 4A43            	  1829: 	tst.w	d3
-00:00263C1C 6E00001E        	  1830: 	bgt	.down
-00:00263C20 47EB000A        	  1831: 	lea	10(a3),a3		; [cyc] fall-through
-00:00263C24 0C45000D        	  1832: 	cmpi.w	#$d,d5
-00:00263C28 6C000092        	  1833: 	bge	.draw
-00:00263C2C 47EB009E        	  1834: 	lea	158(a3),a3		; [cyc] fall-through
-00:00263C30 6100FF00        	  1835: 	bsr	st4_vel	; top edge
-00:00263C34 21510010        	  1836: 	move.l	(a1),O_VX(a0)
-00:00263C38 60000082        	  1837: 	bra	.draw
-                            	  1838: .down:
-00:00263C3C 0C4500D3        	  1839: 	cmpi.w	#$d3,d5
-00:00263C40 6F00007A        	  1840: 	ble	.draw
-00:00263C44 47EB00B6        	  1841: 	lea	182(a3),a3		; [cyc] fall-through
-00:00263C48 6100FEE8        	  1842: 	bsr	st4_vel	; bottom edge
-00:00263C4C 3019            	  1843: 	move.w	(a1)+,d0
-00:00263C4E 4440            	  1844: 	neg.w	d0
-00:00263C50 31400010        	  1845: 	move.w	d0,O_VX(a0)
-00:00263C54 3011            	  1846: 	move.w	(a1),d0
-00:00263C56 4440            	  1847: 	neg.w	d0
-00:00263C58 31400012        	  1848: 	move.w	d0,O_VY(a0)
-00:00263C5C 6000005E        	  1849: 	bra	.draw
-                            	  1850: .nob:
-00:00263C60 4A42            	  1851: 	tst.w	d2	; no bounces left: die once off screen
-00:00263C62 6E000016        	  1852: 	bgt	.nr
-00:00263C66 47EB000A        	  1853: 	lea	10(a3),a3		; [cyc] fall-through
-00:00263C6A 0C44FFF2        	  1854: 	cmpi.w	#-$e,d4
-00:00263C6E 6F00003C        	  1855: 	ble	.die
-00:00263C72 47EB006E        	  1856: 	lea	110(a3),a3		; [cyc] fall-through
-00:00263C76 6000000E        	  1857: 	bra	.ny
-                            	  1858: .nr:
-00:00263C7A 0C4401CE        	  1859: 	cmpi.w	#$1ce,d4
-00:00263C7E 6C00002C        	  1860: 	bge	.die
-00:00263C82 47EB0064        	  1861: 	lea	100(a3),a3		; [cyc] fall-through
-                            	  1862: .ny:
-00:00263C86 4A43            	  1863: 	tst.w	d3
-00:00263C88 6E000016        	  1864: 	bgt	.nd
-00:00263C8C 47EB000A        	  1865: 	lea	10(a3),a3		; [cyc] fall-through
-00:00263C90 0C45FFF4        	  1866: 	cmpi.w	#-$c,d5
-00:00263C94 6E000026        	  1867: 	bgt	.draw
-00:00263C98 47EBFFDA        	  1868: 	lea	-38(a3),a3		; [cyc] fall-through
-00:00263C9C 6000000E        	  1869: 	bra	.die
-                            	  1870: .nd:
-00:00263CA0 0C4500EC        	  1871: 	cmpi.w	#$ec,d5
-00:00263CA4 6D000016        	  1872: 	blt	.draw
-00:00263CA8 47EBFFD0        	  1873: 	lea	-48(a3),a3		; [cyc] fall-through
-                            	  1874: .die:
-00:00263CAC 536D0002        	  1875: 	subq.w	#1,SYS+$02(a5)	; $528
-00:00263CB0 536D000A        	  1876: 	subq.w	#1,SYS+$0a(a5)
-00:00263CB4 536D000E        	  1877: 	subq.w	#1,SYS+$0e(a5)
-00:00263CB8 4250            	  1878: 	clr.w	(a0)
-00:00263CBA 4E75            	  1879: 	rts
-                            	  1880: .draw:
-00:00263CBC 3004            	  1881: 	move.w	d4,d0
-00:00263CBE 0440000E        	  1882: 	subi.w	#$e,d0
-00:00263CC2 024007FF        	  1883: 	andi.w	#$7ff,d0
-00:00263CC6 00408000        	  1884: 	ori.w	#$8000,d0
-00:00263CCA 3140001C        	  1885: 	move.w	d0,O_SPRX(a0)
-00:00263CCE 3005            	  1886: 	move.w	d5,d0
-00:00263CD0 0440000F        	  1887: 	subi.w	#$f,d0
-00:00263CD4 024003FF        	  1888: 	andi.w	#$3ff,d0
-00:00263CD8 00408000        	  1889: 	ori.w	#$8000,d0
-00:00263CDC 3140001E        	  1890: 	move.w	d0,O_SPRY(a0)
-00:00263CE0 6000F604        	  1891: 	bra	anim_up
-                            	  1892: 
-                            	  1893: ; ---------------------------------------------------------------------------
-                            	  1894: ; state 5: falling debris
-                            	  1895: ; ---------------------------------------------------------------------------
-                            	  1896: st5:
-00:00263CE4 47EB0194        	  1897: 	lea	404(a3),a3		; [cyc] block
-00:00263CE8 38280014        	  1898: 	move.w	O_AX(a0),d4
-00:00263CEC D8680010        	  1899: 	add.w	O_VX(a0),d4
-00:00263CF0 3004            	  1900: 	move.w	d4,d0
-00:00263CF2 6A000016        	  1901: 	bpl	.p_19
-00:00263CF6 47EB0024        	  1902: 	lea	36(a3),a3		; [cyc] fall-through
-00:00263CFA 064400FF        	  1903: 	addi.w	#$ff,d4	; v < 0: q = (v + 255) >> 8, r = v - (v + 255 & $ff00)
-00:00263CFE 3204            	  1904: 	move.w	d4,d1
-00:00263D00 0241FF00        	  1905: 	andi.w	#$ff00,d1
-00:00263D04 9041            	  1906: 	sub.w	d1,d0
-00:00263D06 60000006        	  1907: 	bra	.s_19
-                            	  1908: .p_19:
-00:00263D0A 024000FF        	  1909: 	andi.w	#$ff,d0	; v >= 0: q = v >> 8, r = v & $ff
-                            	  1910: .s_19:
-00:00263D0E 31400014        	  1911: 	move.w	d0,O_AX(a0)
-00:00263D12 E044            	  1912: 	asr.w	#8,d4
-00:00263D14 3A280016        	  1913: 	move.w	O_AY(a0),d5
-00:00263D18 DA680012        	  1914: 	add.w	O_VY(a0),d5
-00:00263D1C 3005            	  1915: 	move.w	d5,d0
-00:00263D1E 6A000016        	  1916: 	bpl	.p_20
-00:00263D22 47EB0024        	  1917: 	lea	36(a3),a3		; [cyc] fall-through
-00:00263D26 064500FF        	  1918: 	addi.w	#$ff,d5	; v < 0: q = (v + 255) >> 8, r = v - (v + 255 & $ff00)
-00:00263D2A 3205            	  1919: 	move.w	d5,d1
-00:00263D2C 0241FF00        	  1920: 	andi.w	#$ff00,d1
-00:00263D30 9041            	  1921: 	sub.w	d1,d0
-00:00263D32 60000006        	  1922: 	bra	.s_20
-                            	  1923: .p_20:
-00:00263D36 024000FF        	  1924: 	andi.w	#$ff,d0	; v >= 0: q = v >> 8, r = v & $ff
-                            	  1925: .s_20:
-00:00263D3A 31400016        	  1926: 	move.w	d0,O_AY(a0)
-00:00263D3E E045            	  1927: 	asr.w	#8,d5
-00:00263D40 D8680006        	  1928: 	add.w	O_X(a0),d4
-00:00263D44 31440006        	  1929: 	move.w	d4,O_X(a0)
-00:00263D48 B868002E        	  1930: 	cmp.w	O_FLAG(a0),d4
-00:00263D4C 6E000012        	  1931: 	bgt	.alive
-00:00263D50 47EBFF88        	  1932: 	lea	-120(a3),a3		; [cyc] fall-through
-00:00263D54 536D0002        	  1933: 	subq.w	#1,SYS+$02(a5)	; $500
-00:00263D58 536D0010        	  1934: 	subq.w	#1,SYS+$10(a5)
-00:00263D5C 4250            	  1935: 	clr.w	(a0)
-00:00263D5E 4E75            	  1936: 	rts
-                            	  1937: .alive:
-00:00263D60 046800100010    	  1938: 	subi.w	#$10,O_VX(a0)
-00:00263D66 DA680008        	  1939: 	add.w	O_Y(a0),d5
-00:00263D6A DA47            	  1940: 	add.w	d7,d5
-00:00263D6C 31450008        	  1941: 	move.w	d5,O_Y(a0)
-00:00263D70 3004            	  1942: 	move.w	d4,d0
-00:00263D72 90680040        	  1943: 	sub.w	O_OX(a0),d0
-00:00263D76 024007FF        	  1944: 	andi.w	#$7ff,d0
-00:00263D7A 00408000        	  1945: 	ori.w	#$8000,d0
-00:00263D7E 3140001C        	  1946: 	move.w	d0,O_SPRX(a0)
-00:00263D82 3005            	  1947: 	move.w	d5,d0
-00:00263D84 90680042        	  1948: 	sub.w	O_OY(a0),d0
-00:00263D88 024003FF        	  1949: 	andi.w	#$3ff,d0
-00:00263D8C 00408000        	  1950: 	ori.w	#$8000,d0
-00:00263D90 3140001E        	  1951: 	move.w	d0,O_SPRY(a0)
-00:00263D94 6000F51E        	  1952: 	bra	anim_down
-                            	  1953: 
-                            	  1954: ; ---------------------------------------------------------------------------
-                            	  1955: ; states 6 / 7: items moving with the background
-                            	  1956: ; ---------------------------------------------------------------------------
-                            	  1957: item_move:
-00:00263D98 4A680032        	  1958: 	tst.w	O_TIMER(a0)
-00:00263D9C 6700000C        	  1959: 	beq	.m
-00:00263DA0 47EBFFD4        	  1960: 	lea	-44(a3),a3		; [cyc] fall-through
-00:00263DA4 42680032        	  1961: 	clr.w	O_TIMER(a0)
-00:00263DA8 4E75            	  1962: 	rts
-                            	  1963: .m:
-00:00263DAA 302D2298        	  1964: 	move.w	GLOB+8(a5),d0
-00:00263DAE 0C680002003C    	  1965: 	cmpi.w	#2,O_P1E(a0)
-00:00263DB4 6600000A        	  1966: 	bne	.s
-00:00263DB8 47EB0016        	  1967: 	lea	22(a3),a3		; [cyc] fall-through
-00:00263DBC 302D229A        	  1968: 	move.w	GLOB+10(a5),d0
-                            	  1969: .s:
-00:00263DC0 D1680006        	  1970: 	add.w	d0,O_X(a0)
-00:00263DC4 DF680008        	  1971: 	add.w	d7,O_Y(a0)
-00:00263DC8 4E75            	  1972: 	rts
-                            	  1973: 
-                            	  1974: st6:
-00:00263DCA 47EB0150        	  1975: 	lea	336(a3),a3		; [cyc] block
-00:00263DCE 6100FFC8        	  1976: 	bsr	item_move
-00:00263DD2 38280006        	  1977: 	move.w	O_X(a0),d4
-00:00263DD6 0C44FFF2        	  1978: 	cmpi.w	#-$e,d4
-00:00263DDA 6F000032        	  1979: 	ble	.die
-00:00263DDE 47EBFFF0        	  1980: 	lea	-16(a3),a3		; [cyc] fall-through
-00:00263DE2 3A280008        	  1981: 	move.w	O_Y(a0),d5
-00:00263DE6 3004            	  1982: 	move.w	d4,d0
-00:00263DE8 0440000E        	  1983: 	subi.w	#$e,d0
-00:00263DEC 024007FF        	  1984: 	andi.w	#$7ff,d0
-00:00263DF0 00408000        	  1985: 	ori.w	#$8000,d0
-00:00263DF4 3140001C        	  1986: 	move.w	d0,O_SPRX(a0)
-00:00263DF8 3005            	  1987: 	move.w	d5,d0
-00:00263DFA 0440000F        	  1988: 	subi.w	#$f,d0
-00:00263DFE 024003FF        	  1989: 	andi.w	#$3ff,d0
-00:00263E02 00408000        	  1990: 	ori.w	#$8000,d0
-00:00263E06 3140001E        	  1991: 	move.w	d0,O_SPRY(a0)
-00:00263E0A 6000F4DA        	  1992: 	bra	anim_up
-                            	  1993: .die:
-00:00263E0E 536D0002        	  1994: 	subq.w	#1,SYS+$02(a5)	; $4B4
-00:00263E12 536D000C        	  1995: 	subq.w	#1,SYS+$0c(a5)
-00:00263E16 536D000A        	  1996: 	subq.w	#1,SYS+$0a(a5)
-00:00263E1A 6100EE68        	  1997: 	bsr	push_removed
-00:00263E1E 4250            	  1998: 	clr.w	(a0)
-00:00263E20 4E75            	  1999: 	rts
-                            	  2000: 
-                            	  2001: st7:
-00:00263E22 47EB0142        	  2002: 	lea	322(a3),a3		; [cyc] block
-00:00263E26 6100FF70        	  2003: 	bsr	item_move
-00:00263E2A 38280006        	  2004: 	move.w	O_X(a0),d4
-00:00263E2E B868002E        	  2005: 	cmp.w	O_FLAG(a0),d4
-00:00263E32 6E000016        	  2006: 	bgt	.alive
-00:00263E36 47EB000C        	  2007: 	lea	12(a3),a3		; [cyc] fall-through
-00:00263E3A 536D0002        	  2008: 	subq.w	#1,SYS+$02(a5)	; $474
-00:00263E3E 536D000C        	  2009: 	subq.w	#1,SYS+$0c(a5)
-00:00263E42 6100EE40        	  2010: 	bsr	push_removed
-00:00263E46 4250            	  2011: 	clr.w	(a0)
-00:00263E48 4E75            	  2012: 	rts
-                            	  2013: .alive:
-00:00263E4A 3A280008        	  2014: 	move.w	O_Y(a0),d5
-00:00263E4E 3004            	  2015: 	move.w	d4,d0
-00:00263E50 90680040        	  2016: 	sub.w	O_OX(a0),d0
-00:00263E54 024007FF        	  2017: 	andi.w	#$7ff,d0
-00:00263E58 00408000        	  2018: 	ori.w	#$8000,d0
-00:00263E5C 3140001C        	  2019: 	move.w	d0,O_SPRX(a0)
-00:00263E60 3005            	  2020: 	move.w	d5,d0
-00:00263E62 90680042        	  2021: 	sub.w	O_OY(a0),d0
-00:00263E66 024003FF        	  2022: 	andi.w	#$3ff,d0
-00:00263E6A 00408000        	  2023: 	ori.w	#$8000,d0
-00:00263E6E 3140001E        	  2024: 	move.w	d0,O_SPRY(a0)
-00:00263E72 6000F440        	  2025: 	bra	anim_down
-                            	  2026: 
+                            	  1103: ; rng: additive lagged Fibonacci (ARM $08010CD8) -> d0.l; clobbers d1, d2, a1
+                            	  1104: rng:
+00:00263374 43ED22A4        	  1105: 	lea	RNG_S(a5),a1
+00:00263378 222D2384        	  1106: 	move.l	RNG_J(a5),d1
+00:0026337C 242D2380        	  1107: 	move.l	RNG_K(a5),d2
+00:00263380 D281            	  1108: 	add.l	d1,d1
+00:00263382 D281            	  1109: 	add.l	d1,d1
+00:00263384 D482            	  1110: 	add.l	d2,d2
+00:00263386 D482            	  1111: 	add.l	d2,d2
+00:00263388 20311800        	  1112: 	move.l	(a1,d1.l),d0
+00:0026338C D0B12800        	  1113: 	add.l	(a1,d2.l),d0
+00:00263390 23801800        	  1114: 	move.l	d0,(a1,d1.l)
+00:00263394 E481            	  1115: 	asr.l	#2,d1
+00:00263396 E482            	  1116: 	asr.l	#2,d2
+00:00263398 5381            	  1117: 	subq.l	#1,d1	; j - 1
+00:0026339A 5382            	  1118: 	subq.l	#1,d2	; k - 1
+00:0026339C 6A000014        	  1119: 	bpl	.kok
+00:002633A0 47EB000A        	  1120: 	lea	10(a3),a3		; [cyc] fall-through
+00:002633A4 2B412384        	  1121: 	move.l	d1,RNG_J(a5)	; no wrap check on this path (firmware quirk)
+00:002633A8 7436            	  1122: 	moveq	#$36,d2
+00:002633AA 2B422380        	  1123: 	move.l	d2,RNG_K(a5)
+00:002633AE 60000016        	  1124: 	bra	.x
+                            	  1125: .kok:
+00:002633B2 2B422380        	  1126: 	move.l	d2,RNG_K(a5)
+00:002633B6 4A81            	  1127: 	tst.l	d1
+00:002633B8 6A000008        	  1128: 	bpl	.jok
+00:002633BC 47EB000E        	  1129: 	lea	14(a3),a3		; [cyc] fall-through
+00:002633C0 7236            	  1130: 	moveq	#$36,d1
+                            	  1131: .jok:
+00:002633C2 2B412384        	  1132: 	move.l	d1,RNG_J(a5)
+                            	  1133: .x:
+00:002633C6 02807FFFFFFF    	  1134: 	andi.l	#$7fffffff,d0
+00:002633CC 4E75            	  1135: 	rts
+                            	  1136: 
+                            	  1137: ; aim: target angle towards player (d2 = 0: GLOB[0..1], else GLOB[2..3])
+                            	  1138: ; from x d4, y d5 -> d0.w (0..255); clobbers d1, d2, a1
+                            	  1139: aim:
+00:002633CE 43ED2290        	  1140: 	lea	GLOB(a5),a1
+00:002633D2 4A42            	  1141: 	tst.w	d2
+00:002633D4 67000008        	  1142: 	beq	.p
+00:002633D8 47EB0012        	  1143: 	lea	18(a3),a3		; [cyc] fall-through
+00:002633DC 5889            	  1144: 	addq.l	#4,a1
+                            	  1145: .p:
+00:002633DE 3019            	  1146: 	move.w	(a1)+,d0
+00:002633E0 9044            	  1147: 	sub.w	d4,d0
+00:002633E2 06400200        	  1148: 	addi.w	#$200,d0
+00:002633E6 E848            	  1149: 	lsr.w	#4,d0	; row (0..$fff)
+00:002633E8 3211            	  1150: 	move.w	(a1),d1
+00:002633EA 9245            	  1151: 	sub.w	d5,d1
+00:002633EC 06410100        	  1152: 	addi.w	#$100,d1
+00:002633F0 E649            	  1153: 	lsr.w	#3,d1	; column (0..$1fff)
+00:002633F2 48C0            	  1154: 	ext.l	d0
+00:002633F4 02800000FFFF    	  1155: 	andi.l	#$ffff,d0
+00:002633FA ED88            	  1156: 	lsl.l	#6,d0
+00:002633FC 02810000FFFF    	  1157: 	andi.l	#$ffff,d1
+00:00263402 D081            	  1158: 	add.l	d1,d0	; index into the table at ARM $2C90
+00:00263404 0C8000001370    	  1159: 	cmpi.l	#AIMTAB_SIZE,d0	; beyond the internal ROM: MAME reads 0
+00:0026340A 64000016        	  1160: 	bcc	.zero
+00:0026340E 47EB0028        	  1161: 	lea	40(a3),a3		; [cyc] fall-through
+00:00263412 43F900270400    	  1162: 	lea	AIMTAB,a1
+00:00263418 10310800        	  1163: 	move.b	(a1,d0.l),d0
+00:0026341C 024000FF        	  1164: 	andi.w	#$ff,d0
+00:00263420 4E75            	  1165: 	rts
+                            	  1166: .zero:
+00:00263422 7000            	  1167: 	moveq	#0,d0
+00:00263424 4E75            	  1168: 	rts
+                            	  1169: 
+                            	  1170: ; ---------------------------------------------------------------------------
+                            	  1171: ; state 2: scripted bullet
+                            	  1172: ; ---------------------------------------------------------------------------
+                            	  1173: st2:
+00:00263426 47EB01C0        	  1174: 	lea	448(a3),a3		; [cyc] block
+00:0026342A 30280032        	  1175: 	move.w	O_TIMER(a0),d0
+00:0026342E 67000026        	  1176: 	beq	.cyc_stub166	; @unlikely
+                            	  1177: 	; Fast path (instruction still running): st2_timer's work with the velocity added
+                            	  1178: 	; to the remainder while it is in a register (taken back if the bullet dies), and
+                            	  1179: 	; the four bounds as two unsigned ranges: -9 < y < $E8, -9 < x <= $1C7.
+00:00263432 5340            	  1180: 	subq.w	#1,d0
+00:00263434 31400032        	  1181: 	move.w	d0,O_TIMER(a0)
+00:00263438 38280014        	  1182: 	move.w	O_AX(a0),d4
+00:0026343C 3004            	  1183: 	move.w	d4,d0
+00:0026343E 6A00001E        	  1184: 	bpl	.p_9
+00:00263442 47EB0024        	  1185: 	lea	36(a3),a3		; [cyc] fall-through
+00:00263446 064400FF        	  1186: 	addi.w	#$ff,d4
+00:0026344A 3204            	  1187: 	move.w	d4,d1
+00:0026344C 0241FF00        	  1188: 	andi.w	#$ff00,d1
+00:00263450 9041            	  1189: 	sub.w	d1,d0
+00:00263452 6000000E        	  1190: 	bra	.s_9
+                            	  1191: .cyc_stub166:
+00:00263456 47EB0084        	  1192: 	lea	132(a3),a3		; [cyc] unlikely edge
+00:0026345A 600000CC        	  1193: 	bra	st2_script
+                            	  1194: .p_9:
+00:0026345E 024000FF        	  1195: 	andi.w	#$ff,d0
+                            	  1196: .s_9:
+00:00263462 D0680010        	  1197: 	add.w	O_VX(a0),d0
+00:00263466 31400014        	  1198: 	move.w	d0,O_AX(a0)
+00:0026346A E044            	  1199: 	asr.w	#8,d4
+00:0026346C 3A280016        	  1200: 	move.w	O_AY(a0),d5
+00:00263470 3005            	  1201: 	move.w	d5,d0
+00:00263472 6A000016        	  1202: 	bpl	.p_10
+00:00263476 47EB0024        	  1203: 	lea	36(a3),a3		; [cyc] fall-through
+00:0026347A 064500FF        	  1204: 	addi.w	#$ff,d5
+00:0026347E 3205            	  1205: 	move.w	d5,d1
+00:00263480 0241FF00        	  1206: 	andi.w	#$ff00,d1
+00:00263484 9041            	  1207: 	sub.w	d1,d0
+00:00263486 60000006        	  1208: 	bra	.s_10
+                            	  1209: .p_10:
+00:0026348A 024000FF        	  1210: 	andi.w	#$ff,d0
+                            	  1211: .s_10:
+00:0026348E D0680012        	  1212: 	add.w	O_VY(a0),d0
+00:00263492 31400016        	  1213: 	move.w	d0,O_AY(a0)
+00:00263496 E045            	  1214: 	asr.w	#8,d5
+00:00263498 D8680006        	  1215: 	add.w	O_X(a0),d4	; x
+00:0026349C DA680008        	  1216: 	add.w	O_Y(a0),d5
+00:002634A0 DA47            	  1217: 	add.w	d7,d5	; y
+00:002634A2 3005            	  1218: 	move.w	d5,d0
+00:002634A4 5040            	  1219: 	addq.w	#8,d0
+00:002634A6 0C4000F0        	  1220: 	cmpi.w	#$e8+8,d0
+00:002634AA 64000044        	  1221: 	bcc	.cyc_stub173	; @unlikely
+00:002634AE 3004            	  1222: 	move.w	d4,d0
+00:002634B0 5040            	  1223: 	addq.w	#8,d0
+00:002634B2 0C4001D0        	  1224: 	cmpi.w	#$1c8+8,d0
+00:002634B6 64000040        	  1225: 	bcc	.cyc_stub174	; @unlikely
+                            	  1226: .on:
+00:002634BA 3004            	  1227: 	move.w	d4,d0
+00:002634BC 90680040        	  1228: 	sub.w	O_OX(a0),d0
+00:002634C0 024007FF        	  1229: 	andi.w	#$7ff,d0
+00:002634C4 00408000        	  1230: 	ori.w	#$8000,d0
+00:002634C8 3140001C        	  1231: 	move.w	d0,O_SPRX(a0)
+00:002634CC 3005            	  1232: 	move.w	d5,d0
+00:002634CE 90680042        	  1233: 	sub.w	O_OY(a0),d0
+00:002634D2 024003FF        	  1234: 	andi.w	#$3ff,d0
+00:002634D6 00408000        	  1235: 	ori.w	#$8000,d0
+00:002634DA 3140001E        	  1236: 	move.w	d0,O_SPRY(a0)
+00:002634DE 31440006        	  1237: 	move.w	d4,O_X(a0)
+00:002634E2 31450008        	  1238: 	move.w	d5,O_Y(a0)
+00:002634E6 53680036        	  1239: 	subq.w	#1,O_ACNT(a0)	; counter at 0: it wraps (carry), reloaded by st2_frame
+00:002634EA 65000014        	  1240: 	bcs	.cyc_stub175	; @unlikely
+00:002634EE 4E75            	  1241: 	rts
+                            	  1242: .cyc_stub173:
+00:002634F0 47EB000A        	  1243: 	lea	10(a3),a3		; [cyc] unlikely edge
+00:002634F4 60000012        	  1244: 	bra	.off
+                            	  1245: .cyc_stub174:
+00:002634F8 47EB0026        	  1246: 	lea	38(a3),a3		; [cyc] unlikely edge
+00:002634FC 6000000A        	  1247: 	bra	.off
+                            	  1248: .cyc_stub175:
+00:00263500 47EB00E4        	  1249: 	lea	228(a3),a3		; [cyc] unlikely edge
+00:00263504 600003F0        	  1250: 	bra	st2_frame
+                            	  1251: .off:
+00:00263508 4A68002E        	  1252: 	tst.w	O_FLAG(a0)
+00:0026350C 6600FFAC        	  1253: 	bne	.on
+00:00263510 47EBFFB0        	  1254: 	lea	-80(a3),a3		; [cyc] fall-through
+00:00263514 30280010        	  1255: 	move.w	O_VX(a0),d0	; dies: the remainder as the firmware leaves it
+00:00263518 91680014        	  1256: 	sub.w	d0,O_AX(a0)
+00:0026351C 30280012        	  1257: 	move.w	O_VY(a0),d0
+00:00263520 91680016        	  1258: 	sub.w	d0,O_AY(a0)
+00:00263524 600000AA        	  1259: 	bra	op_kill
+                            	  1260: st2_script:
+00:00263528 38280014        	  1261: 	move.w	O_AX(a0),d4
+00:0026352C 3004            	  1262: 	move.w	d4,d0
+00:0026352E 6A000016        	  1263: 	bpl	.p_12
+00:00263532 47EB0024        	  1264: 	lea	36(a3),a3		; [cyc] fall-through
+00:00263536 064400FF        	  1265: 	addi.w	#$ff,d4	; v < 0: q = (v + 255) >> 8, r = v - (v + 255 & $ff00)
+00:0026353A 3204            	  1266: 	move.w	d4,d1
+00:0026353C 0241FF00        	  1267: 	andi.w	#$ff00,d1
+00:00263540 9041            	  1268: 	sub.w	d1,d0
+00:00263542 60000006        	  1269: 	bra	.s_12
+                            	  1270: .p_12:
+00:00263546 024000FF        	  1271: 	andi.w	#$ff,d0	; v >= 0: q = v >> 8, r = v & $ff
+                            	  1272: .s_12:
+00:0026354A 31400014        	  1273: 	move.w	d0,O_AX(a0)
+00:0026354E E044            	  1274: 	asr.w	#8,d4
+00:00263550 3A280016        	  1275: 	move.w	O_AY(a0),d5
+00:00263554 3005            	  1276: 	move.w	d5,d0
+00:00263556 6A000016        	  1277: 	bpl	.p_13
+00:0026355A 47EB0024        	  1278: 	lea	36(a3),a3		; [cyc] fall-through
+00:0026355E 064500FF        	  1279: 	addi.w	#$ff,d5	; v < 0: q = (v + 255) >> 8, r = v - (v + 255 & $ff00)
+00:00263562 3205            	  1280: 	move.w	d5,d1
+00:00263564 0241FF00        	  1281: 	andi.w	#$ff00,d1
+00:00263568 9041            	  1282: 	sub.w	d1,d0
+00:0026356A 60000006        	  1283: 	bra	.s_13
+                            	  1284: .p_13:
+00:0026356E 024000FF        	  1285: 	andi.w	#$ff,d0	; v >= 0: q = v >> 8, r = v & $ff
+                            	  1286: .s_13:
+00:00263572 31400016        	  1287: 	move.w	d0,O_AY(a0)
+00:00263576 E045            	  1288: 	asr.w	#8,d5
+00:00263578 D8680006        	  1289: 	add.w	O_X(a0),d4	; x
+00:0026357C DA680008        	  1290: 	add.w	O_Y(a0),d5
+00:00263580 DA47            	  1291: 	add.w	d7,d5	; y
+00:00263582 22680038        	  1292: 	movea.l	O_SCRIPT(a0),a1
+                            	  1293: st2_exec:
+00:00263586 30290002        	  1294: 	move.w	2(a1),d0	; opcode
+00:0026358A 0C400013        	  1295: 	cmpi.w	#$13,d0
+00:0026358E 62000010        	  1296: 	bhi	.bad
+00:00263592 47EBFEE8        	  1297: 	lea	-280(a3),a3		; [cyc] fall-through
+00:00263596 D040            	  1298: 	add.w	d0,d0
+00:00263598 303B000E        	  1299: 	move.w	st2_ops(pc,d0.w),d0
+00:0026359C 4EFB000A        	  1300: 	jmp	st2_ops(pc,d0.w)
+                            	  1301: .bad:
+00:002635A0 303CFFFF        	  1302: 	move.w	#$ffff,d0
+00:002635A4 600002B6        	  1303: 	bra	st2_timer
+                            	  1304: 
+                            	  1305: st2_ops:
+00:002635A8 0028            	  1306: 	dc.w	op_kill-st2_ops, op_vanish-st2_ops, op_flag1-st2_ops, op_flag0-st2_ops
+00:002635AA 0038
+00:002635AC 0044
+00:002635AE 0052
+00:002635B0 005E            	  1307: 	dc.w	op_loop-st2_ops, op_type-st2_ops, op_spdadd-st2_ops, op_spdsub-st2_ops
+00:002635B2 00B6
+00:002635B4 010C
+00:002635B6 011C
+00:002635B8 012C            	  1308: 	dc.w	op_spdset-st2_ops, op_angadd-st2_ops, op_angsub-st2_ops, op_angset-st2_ops
+00:002635BA 014A
+00:002635BC 015C
+00:002635BE 016E
+00:002635C0 0196            	  1309: 	dc.w	op_angrnd-st2_ops, op_angspread-st2_ops, op_angspd-st2_ops, op_aimturn-st2_ops
+00:002635C2 01B2
+00:002635C4 01F6
+00:002635C6 0210
+00:002635C8 0254            	  1310: 	dc.w	op_aim-st2_ops, st2_after-st2_ops, st2_after-st2_ops, op_accadd-st2_ops
+00:002635CA 027A
+00:002635CC 027A
+00:002635CE 0266
+                            	  1311: 
+                            	  1312: op_kill:
+00:002635D0 47EB0044        	  1313: 	lea	68(a3),a3		; [cyc] block
+00:002635D4 536D0002        	  1314: 	subq.w	#1,SYS+$02(a5)
+00:002635D8 536D0006        	  1315: 	subq.w	#1,SYS+$06(a5)
+00:002635DC 4250            	  1316: 	clr.w	(a0)
+00:002635DE 4E75            	  1317: 	rts
+                            	  1318: op_vanish:
+00:002635E0 47EB00EE        	  1319: 	lea	238(a3),a3		; [cyc] block
+00:002635E4 6100F686        	  1320: 	bsr	vanish_3a4
+00:002635E8 6000035C        	  1321: 	bra	st3
+                            	  1322: op_flag1:
+00:002635EC 47EB0022        	  1323: 	lea	34(a3),a3		; [cyc] block
+00:002635F0 317C0001002E    	  1324: 	move.w	#1,O_FLAG(a0)
+00:002635F6 6000022A        	  1325: 	bra	st2_after
+                            	  1326: op_flag0:
+00:002635FA 47EB0022        	  1327: 	lea	34(a3),a3		; [cyc] block
+00:002635FE 4268002E        	  1328: 	clr.w	O_FLAG(a0)
+00:00263602 6000021E        	  1329: 	bra	st2_after
+                            	  1330: op_loop:
+00:00263606 47EB0200        	  1331: 	lea	512(a3),a3		; [cyc] block
+00:0026360A 3028002A        	  1332: 	move.w	O_CNT(a0),d0
+00:0026360E 6600001A        	  1333: 	bne	.nz
+00:00263612 47EBFE4A        	  1334: 	lea	-438(a3),a3		; [cyc] fall-through
+00:00263616 7200            	  1335: 	moveq	#0,d1
+00:00263618 1211            	  1336: 	move.b	(a1),d1	; ARM byte 1 of the instruction: repeat count
+00:0026361A 3141002A        	  1337: 	move.w	d1,O_CNT(a0)
+00:0026361E 67000202        	  1338: 	beq	st2_after
+00:00263622 47EB01DC        	  1339: 	lea	476(a3),a3		; [cyc] fall-through
+00:00263626 60000018        	  1340: 	bra	.jump
+                            	  1341: .nz:
+00:0026362A 5340            	  1342: 	subq.w	#1,d0
+00:0026362C 3140002A        	  1343: 	move.w	d0,O_CNT(a0)
+00:00263630 6600000E        	  1344: 	bne	.jump
+00:00263634 47EBFFDC        	  1345: 	lea	-36(a3),a3		; [cyc] fall-through
+00:00263638 42680028        	  1346: 	clr.w	O_WAIT(a0)
+00:0026363C 60000206        	  1347: 	bra	st2_advance
+                            	  1348: .jump:
+00:00263640 7200            	  1349: 	moveq	#0,d1
+00:00263642 32290004        	  1350: 	move.w	4(a1),d1
+00:00263646 E789            	  1351: 	lsl.l	#3,d1
+00:00263648 22680038        	  1352: 	movea.l	O_SCRIPT(a0),a1
+00:0026364C 93C1            	  1353: 	suba.l	d1,a1
+00:0026364E 21490038        	  1354: 	move.l	a1,O_SCRIPT(a0)
+00:00263652 7000            	  1355: 	moveq	#0,d0
+00:00263654 1011            	  1356: 	move.b	(a1),d0
+00:00263656 31400028        	  1357: 	move.w	d0,O_WAIT(a0)
+00:0026365A 6000FF2A        	  1358: 	bra	st2_exec
+                            	  1359: op_type:
+00:0026365E 47EB00CE        	  1360: 	lea	206(a3),a3		; [cyc] block
+00:00263662 7200            	  1361: 	moveq	#0,d1
+00:00263664 32290004        	  1362: 	move.w	4(a1),d1
+00:00263668 E789            	  1363: 	lsl.l	#3,d1
+00:0026366A 45F9002885A0    	  1364: 	lea	T_TYPES,a2
+00:00263670 D5C1            	  1365: 	adda.l	d1,a2
+00:00263672 215A003C        	  1366: 	move.l	(a2)+,O_P1E(a0)
+00:00263676 21520040        	  1367: 	move.l	(a2),O_OX(a0)
+00:0026367A 3228003C        	  1368: 	move.w	O_P1E(a0),d1
+00:0026367E 4A28003F        	  1369: 	tst.b	O_DIRANIM(a0)
+00:00263682 6700001A        	  1370: 	beq	.nd
+00:00263686 47EB003E        	  1371: 	lea	62(a3),a3		; [cyc] fall-through
+00:0026368A 7000            	  1372: 	moveq	#0,d0
+00:0026368C 10280019        	  1373: 	move.b	O_ANG(a0),d0
+00:00263690 5840            	  1374: 	addq.w	#4,d0
+00:00263692 024000FF        	  1375: 	andi.w	#$ff,d0
+00:00263696 E648            	  1376: 	lsr.w	#3,d0
+00:00263698 D040            	  1377: 	add.w	d0,d0
+00:0026369A D040            	  1378: 	add.w	d0,d0
+00:0026369C D240            	  1379: 	add.w	d0,d1
+                            	  1380: .nd:
+00:0026369E 3141002C        	  1381: 	move.w	d1,O_ABASE(a0)
+00:002636A2 7200            	  1382: 	moveq	#0,d1
+00:002636A4 1228003E        	  1383: 	move.b	O_NFRAMES(a0),d1
+00:002636A8 31410030        	  1384: 	move.w	d1,O_AFRAME(a0)
+00:002636AC 42680036        	  1385: 	clr.w	O_ACNT(a0)
+00:002636B0 60000170        	  1386: 	bra	st2_after
+                            	  1387: op_spdadd:
+00:002636B4 47EB01D8        	  1388: 	lea	472(a3),a3		; [cyc] block
+00:002636B8 32290004        	  1389: 	move.w	4(a1),d1
+00:002636BC D268001A        	  1390: 	add.w	O_SPEED(a0),d1
+00:002636C0 6000001A        	  1391: 	bra	op_spd
+                            	  1392: op_spdsub:
+00:002636C4 47EB01D8        	  1393: 	lea	472(a3),a3		; [cyc] block
+00:002636C8 3228001A        	  1394: 	move.w	O_SPEED(a0),d1
+00:002636CC 92690004        	  1395: 	sub.w	4(a1),d1
+00:002636D0 6000000A        	  1396: 	bra	op_spd
+                            	  1397: op_spdset:
+00:002636D4 47EB01C2        	  1398: 	lea	450(a3),a3		; [cyc] block
+00:002636D8 32290004        	  1399: 	move.w	4(a1),d1
+                            	  1400: op_spd:
+00:002636DC 3141001A        	  1401: 	move.w	d1,O_SPEED(a0)
+00:002636E0 7000            	  1402: 	moveq	#0,d0
+00:002636E2 10280019        	  1403: 	move.b	O_ANG(a0),d0
+00:002636E6 2F09            	  1404: 	move.l	a1,-(sp)
+00:002636E8 6100F4AE        	  1405: 	bsr	set_vel
+00:002636EC 225F            	  1406: 	movea.l	(sp)+,a1
+00:002636EE 60000132        	  1407: 	bra	st2_after
+                            	  1408: op_angadd:
+00:002636F2 47EB0228        	  1409: 	lea	552(a3),a3		; [cyc] block
+00:002636F6 7000            	  1410: 	moveq	#0,d0
+00:002636F8 10280019        	  1411: 	move.b	O_ANG(a0),d0
+00:002636FC D0690004        	  1412: 	add.w	4(a1),d0
+00:00263700 6000001C        	  1413: 	bra	op_ang
+                            	  1414: op_angsub:
+00:00263704 47EB0228        	  1415: 	lea	552(a3),a3		; [cyc] block
+00:00263708 7000            	  1416: 	moveq	#0,d0
+00:0026370A 10280019        	  1417: 	move.b	O_ANG(a0),d0
+00:0026370E 90690004        	  1418: 	sub.w	4(a1),d0
+00:00263712 6000000A        	  1419: 	bra	op_ang
+                            	  1420: op_angset:
+00:00263716 47EB020E        	  1421: 	lea	526(a3),a3		; [cyc] block
+00:0026371A 30290004        	  1422: 	move.w	4(a1),d0
+                            	  1423: op_ang:
+00:0026371E 024000FF        	  1424: 	andi.w	#$ff,d0
+00:00263722 11400019        	  1425: 	move.b	d0,O_ANG(a0)
+00:00263726 3228001A        	  1426: 	move.w	O_SPEED(a0),d1
+00:0026372A 2F09            	  1427: 	move.l	a1,-(sp)
+00:0026372C 3F00            	  1428: 	move.w	d0,-(sp)
+00:0026372E 6100F468        	  1429: 	bsr	set_vel
+00:00263732 301F            	  1430: 	move.w	(sp)+,d0
+00:00263734 6100FC1A        	  1431: 	bsr	dir_anim
+00:00263738 225F            	  1432: 	movea.l	(sp)+,a1
+00:0026373A 600000E6        	  1433: 	bra	st2_after
+                            	  1434: op_angrnd:
+00:0026373E 47EB034A        	  1435: 	lea	842(a3),a3		; [cyc] block
+00:00263742 2F09            	  1436: 	move.l	a1,-(sp)
+00:00263744 6100FC2E        	  1437: 	bsr	rng
+00:00263748 2257            	  1438: 	movea.l	(sp),a1
+00:0026374A 32290006        	  1439: 	move.w	6(a1),d1
+00:0026374E 5341            	  1440: 	subq.w	#1,d1
+00:00263750 C041            	  1441: 	and.w	d1,d0
+00:00263752 D0690004        	  1442: 	add.w	4(a1),d0
+00:00263756 60000028        	  1443: 	bra	op_ang_saved
+                            	  1444: op_angspread:
+00:0026375A 47EB036C        	  1445: 	lea	876(a3),a3		; [cyc] block
+00:0026375E 32290006        	  1446: 	move.w	6(a1),d1
+00:00263762 E249            	  1447: 	lsr.w	#1,d1
+00:00263764 93280019        	  1448: 	sub.b	d1,O_ANG(a0)
+00:00263768 2F09            	  1449: 	move.l	a1,-(sp)
+00:0026376A 6100FC08        	  1450: 	bsr	rng
+00:0026376E 2257            	  1451: 	movea.l	(sp),a1
+00:00263770 32290006        	  1452: 	move.w	6(a1),d1
+00:00263774 5341            	  1453: 	subq.w	#1,d1
+00:00263776 C041            	  1454: 	and.w	d1,d0
+00:00263778 7200            	  1455: 	moveq	#0,d1
+00:0026377A 12280019        	  1456: 	move.b	O_ANG(a0),d1
+00:0026377E D041            	  1457: 	add.w	d1,d0
+                            	  1458: op_ang_saved:
+00:00263780 024000FF        	  1459: 	andi.w	#$ff,d0
+00:00263784 11400019        	  1460: 	move.b	d0,O_ANG(a0)
+00:00263788 3228001A        	  1461: 	move.w	O_SPEED(a0),d1
+00:0026378C 3F00            	  1462: 	move.w	d0,-(sp)
+00:0026378E 6100F408        	  1463: 	bsr	set_vel
+00:00263792 301F            	  1464: 	move.w	(sp)+,d0
+00:00263794 6100FBBA        	  1465: 	bsr	dir_anim
+00:00263798 225F            	  1466: 	movea.l	(sp)+,a1
+00:0026379A 60000086        	  1467: 	bra	st2_after
+                            	  1468: op_angspd:
+00:0026379E 47EB0244        	  1469: 	lea	580(a3),a3		; [cyc] block
+00:002637A2 116900070019    	  1470: 	move.b	7(a1),O_ANG(a0)	; low byte of a2
+00:002637A8 31690004001A    	  1471: 	move.w	4(a1),O_SPEED(a0)
+00:002637AE 7000            	  1472: 	moveq	#0,d0
+00:002637B0 10280019        	  1473: 	move.b	O_ANG(a0),d0
+00:002637B4 6000FF68        	  1474: 	bra	op_ang
+                            	  1475: op_aimturn:
+00:002637B8 47EB0132        	  1476: 	lea	306(a3),a3		; [cyc] block
+00:002637BC 2F09            	  1477: 	move.l	a1,-(sp)
+00:002637BE 34290004        	  1478: 	move.w	4(a1),d2
+00:002637C2 6100FC0A        	  1479: 	bsr	aim	; d0 = target
+00:002637C6 2257            	  1480: 	movea.l	(sp),a1
+00:002637C8 7200            	  1481: 	moveq	#0,d1
+00:002637CA 12280019        	  1482: 	move.b	O_ANG(a0),d1	; current
+00:002637CE B041            	  1483: 	cmp.w	d1,d0
+00:002637D0 67000024        	  1484: 	beq	.same
+00:002637D4 47EB021E        	  1485: 	lea	542(a3),a3		; [cyc] fall-through
+00:002637D8 3400            	  1486: 	move.w	d0,d2
+00:002637DA 9441            	  1487: 	sub.w	d1,d2	; target - current
+00:002637DC 7000            	  1488: 	moveq	#0,d0
+00:002637DE 10290007        	  1489: 	move.b	7(a1),d0	; step = a2 & $ff
+00:002637E2 0C42007F        	  1490: 	cmpi.w	#$7f,d2
+00:002637E6 6F000008        	  1491: 	ble	.pos
+00:002637EA 47EB000E        	  1492: 	lea	14(a3),a3		; [cyc] fall-through
+00:002637EE 4440            	  1493: 	neg.w	d0
+                            	  1494: .pos:
+00:002637F0 D041            	  1495: 	add.w	d1,d0
+00:002637F2 6000FF8C        	  1496: 	bra	op_ang_saved
+                            	  1497: .same:
+00:002637F6 588F            	  1498: 	addq.l	#4,sp
+00:002637F8 60000028        	  1499: 	bra	st2_after
+                            	  1500: op_aim:
+00:002637FC 47EB02EE        	  1501: 	lea	750(a3),a3		; [cyc] block
+00:00263800 2F09            	  1502: 	move.l	a1,-(sp)
+00:00263802 34290004        	  1503: 	move.w	4(a1),d2
+00:00263806 6100FBC6        	  1504: 	bsr	aim
+00:0026380A 6000FF74        	  1505: 	bra	op_ang_saved
+                            	  1506: op_accadd:
+00:0026380E 47EB0040        	  1507: 	lea	64(a3),a3		; [cyc] block
+00:00263812 30290004        	  1508: 	move.w	4(a1),d0
+00:00263816 D1680014        	  1509: 	add.w	d0,O_AX(a0)
+00:0026381A 30290006        	  1510: 	move.w	6(a1),d0
+00:0026381E D1680016        	  1511: 	add.w	d0,O_AY(a0)
+                            	  1512: 	; fall through
+                            	  1513: 
+                            	  1514: ; instruction finished: repeat it (wait count) or step to the next one
+                            	  1515: st2_after:
+00:00263822 47EB019E        	  1516: 	lea	414(a3),a3		; [cyc] block
+00:00263826 4A680028        	  1517: 	tst.w	O_WAIT(a0)
+00:0026382A 67000018        	  1518: 	beq	st2_advance
+00:0026382E 47EBFFF4        	  1519: 	lea	-12(a3),a3		; [cyc] fall-through
+00:00263832 53680028        	  1520: 	subq.w	#1,O_WAIT(a0)
+00:00263836 22680038        	  1521: 	movea.l	O_SCRIPT(a0),a1
+00:0026383A 7000            	  1522: 	moveq	#0,d0
+00:0026383C 10290001        	  1523: 	move.b	1(a1),d0	; ARM byte 0: duration
+00:00263840 6000001A        	  1524: 	bra	st2_timer
+                            	  1525: st2_advance:
+00:00263844 22680038        	  1526: 	movea.l	O_SCRIPT(a0),a1
+00:00263848 7000            	  1527: 	moveq	#0,d0
+00:0026384A 10290008        	  1528: 	move.b	8(a1),d0	; next instruction's repeat count (ARM byte 9)
+00:0026384E 31400028        	  1529: 	move.w	d0,O_WAIT(a0)
+00:00263852 5089            	  1530: 	addq.l	#8,a1
+00:00263854 21490038        	  1531: 	move.l	a1,O_SCRIPT(a0)
+00:00263858 10290001        	  1532: 	move.b	1(a1),d0	; its duration
+                            	  1533: st2_timer:
+00:0026385C 31400032        	  1534: 	move.w	d0,O_TIMER(a0)
+00:00263860 0C45FFF7        	  1535: 	cmpi.w	#-9,d5
+00:00263864 6F000060        	  1536: 	ble	.cyc_stub224	; @unlikely
+00:00263868 0C4500E8        	  1537: 	cmpi.w	#$e8,d5
+00:0026386C 6C000060        	  1538: 	bge	.cyc_stub225	; @unlikely
+00:00263870 0C44FFF7        	  1539: 	cmpi.w	#-9,d4
+00:00263874 6F000070        	  1540: 	ble	.off	; @unlikely
+00:00263878 0C4401C7        	  1541: 	cmpi.w	#$1c7,d4
+00:0026387C 6E000058        	  1542: 	bgt	.cyc_stub227	; @unlikely
+                            	  1543: .on:
+00:00263880 3004            	  1544: 	move.w	d4,d0
+00:00263882 90680040        	  1545: 	sub.w	O_OX(a0),d0
+00:00263886 024007FF        	  1546: 	andi.w	#$7ff,d0
+00:0026388A 00408000        	  1547: 	ori.w	#$8000,d0
+00:0026388E 3140001C        	  1548: 	move.w	d0,O_SPRX(a0)
+00:00263892 3005            	  1549: 	move.w	d5,d0
+00:00263894 90680042        	  1550: 	sub.w	O_OY(a0),d0
+00:00263898 024003FF        	  1551: 	andi.w	#$3ff,d0
+00:0026389C 00408000        	  1552: 	ori.w	#$8000,d0
+00:002638A0 3140001E        	  1553: 	move.w	d0,O_SPRY(a0)
+00:002638A4 31440006        	  1554: 	move.w	d4,O_X(a0)
+00:002638A8 31450008        	  1555: 	move.w	d5,O_Y(a0)
+00:002638AC 30280010        	  1556: 	move.w	O_VX(a0),d0
+00:002638B0 D1680014        	  1557: 	add.w	d0,O_AX(a0)
+00:002638B4 30280012        	  1558: 	move.w	O_VY(a0),d0
+00:002638B8 D1680016        	  1559: 	add.w	d0,O_AY(a0)
+00:002638BC 53680036        	  1560: 	subq.w	#1,O_ACNT(a0)
+00:002638C0 6500001C        	  1561: 	bcs	.cyc_stub228	; @unlikely
+00:002638C4 4E75            	  1562: 	rts
+                            	  1563: .cyc_stub224:
+00:002638C6 47EBFFEA        	  1564: 	lea	-22(a3),a3		; [cyc] unlikely edge
+00:002638CA 6000001A        	  1565: 	bra	.off
+                            	  1566: .cyc_stub225:
+00:002638CE 47EBFFFE        	  1567: 	lea	-2(a3),a3		; [cyc] unlikely edge
+00:002638D2 60000012        	  1568: 	bra	.off
+                            	  1569: .cyc_stub227:
+00:002638D6 47EB0026        	  1570: 	lea	38(a3),a3		; [cyc] unlikely edge
+00:002638DA 6000000A        	  1571: 	bra	.off
+                            	  1572: .cyc_stub228:
+00:002638DE 47EB00E4        	  1573: 	lea	228(a3),a3		; [cyc] unlikely edge
+00:002638E2 60000012        	  1574: 	bra	st2_frame
+                            	  1575: .off:
+00:002638E6 4A68002E        	  1576: 	tst.w	O_FLAG(a0)
+00:002638EA 6600FF94        	  1577: 	bne	.on
+00:002638EE 47EBFF40        	  1578: 	lea	-192(a3),a3		; [cyc] fall-through
+00:002638F2 6000FCDC        	  1579: 	bra	op_kill
+                            	  1580: st2_frame:
+00:002638F6 316800340036    	  1581: 	move.w	O_APER(a0),O_ACNT(a0)
+00:002638FC 30280030        	  1582: 	move.w	O_AFRAME(a0),d0
+00:00263900 3200            	  1583: 	move.w	d0,d1
+00:00263902 5341            	  1584: 	subq.w	#1,d1
+00:00263904 6400000C        	  1585: 	bcc	.fs
+00:00263908 47EB001A        	  1586: 	lea	26(a3),a3		; [cyc] fall-through
+00:0026390C 7200            	  1587: 	moveq	#0,d1
+00:0026390E 1228003E        	  1588: 	move.b	O_NFRAMES(a0),d1
+                            	  1589: .fs:
+00:00263912 31410030        	  1590: 	move.w	d1,O_AFRAME(a0)
+                            	  1591: 	; entry = T_1714 + 8*ABASE - 8*frame (32-bit)
+00:00263916 7200            	  1592: 	moveq	#0,d1
+00:00263918 3228002C        	  1593: 	move.w	O_ABASE(a0),d1
+00:0026391C 02800000FFFF    	  1594: 	andi.l	#$ffff,d0
+00:00263922 9280            	  1595: 	sub.l	d0,d1
+00:00263924 E789            	  1596: 	lsl.l	#3,d1
+00:00263926 43F90028010C    	  1597: 	lea	T_1714,a1
+00:0026392C D3C1            	  1598: 	adda.l	d1,a1
+00:0026392E 3019            	  1599: 	move.w	(a1)+,d0
+00:00263930 0240E0FF        	  1600: 	andi.w	#$e0ff,d0
+00:00263934 00401700        	  1601: 	ori.w	#$1700,d0
+00:00263938 31400020        	  1602: 	move.w	d0,O_SPR(a0)
+00:0026393C 31590022        	  1603: 	move.w	(a1)+,O_SPR+2(a0)
+00:00263940 21510024        	  1604: 	move.l	(a1),O_SPR+4(a0)
+00:00263944 4E75            	  1605: 	rts
+                            	  1606: 
+                            	  1607: ; ---------------------------------------------------------------------------
+                            	  1608: ; state 3: vanish
+                            	  1609: ; ---------------------------------------------------------------------------
+                            	  1610: st3:
+00:00263946 47EB01F4        	  1611: 	lea	500(a3),a3		; [cyc] block
+00:0026394A 36280028        	  1612: 	move.w	O_WAIT(a0),d3
+00:0026394E 66000012        	  1613: 	bne	.w
+00:00263952 47EBFE70        	  1614: 	lea	-400(a3),a3		; [cyc] fall-through
+00:00263956 536D0002        	  1615: 	subq.w	#1,SYS+$02(a5)	; $37C
+00:0026395A 536D0008        	  1616: 	subq.w	#1,SYS+$08(a5)
+00:0026395E 4250            	  1617: 	clr.w	(a0)
+00:00263960 4E75            	  1618: 	rts
+                            	  1619: .w:
+00:00263962 5343            	  1620: 	subq.w	#1,d3
+00:00263964 31430028        	  1621: 	move.w	d3,O_WAIT(a0)
+00:00263968 38280014        	  1622: 	move.w	O_AX(a0),d4
+00:0026396C 3004            	  1623: 	move.w	d4,d0
+00:0026396E 6A000016        	  1624: 	bpl	.p_15
+00:00263972 47EB0024        	  1625: 	lea	36(a3),a3		; [cyc] fall-through
+00:00263976 064400FF        	  1626: 	addi.w	#$ff,d4	; v < 0: q = (v + 255) >> 8, r = v - (v + 255 & $ff00)
+00:0026397A 3204            	  1627: 	move.w	d4,d1
+00:0026397C 0241FF00        	  1628: 	andi.w	#$ff00,d1
+00:00263980 9041            	  1629: 	sub.w	d1,d0
+00:00263982 60000006        	  1630: 	bra	.s_15
+                            	  1631: .p_15:
+00:00263986 024000FF        	  1632: 	andi.w	#$ff,d0	; v >= 0: q = v >> 8, r = v & $ff
+                            	  1633: .s_15:
+00:0026398A 31400014        	  1634: 	move.w	d0,O_AX(a0)
+00:0026398E E044            	  1635: 	asr.w	#8,d4
+00:00263990 3A280016        	  1636: 	move.w	O_AY(a0),d5
+00:00263994 3005            	  1637: 	move.w	d5,d0
+00:00263996 6A000016        	  1638: 	bpl	.p_16
+00:0026399A 47EB0024        	  1639: 	lea	36(a3),a3		; [cyc] fall-through
+00:0026399E 064500FF        	  1640: 	addi.w	#$ff,d5	; v < 0: q = (v + 255) >> 8, r = v - (v + 255 & $ff00)
+00:002639A2 3205            	  1641: 	move.w	d5,d1
+00:002639A4 0241FF00        	  1642: 	andi.w	#$ff00,d1
+00:002639A8 9041            	  1643: 	sub.w	d1,d0
+00:002639AA 60000006        	  1644: 	bra	.s_16
+                            	  1645: .p_16:
+00:002639AE 024000FF        	  1646: 	andi.w	#$ff,d0	; v >= 0: q = v >> 8, r = v & $ff
+                            	  1647: .s_16:
+00:002639B2 31400016        	  1648: 	move.w	d0,O_AY(a0)
+00:002639B6 E045            	  1649: 	asr.w	#8,d5
+00:002639B8 D8680006        	  1650: 	add.w	O_X(a0),d4
+00:002639BC DA680008        	  1651: 	add.w	O_Y(a0),d5
+00:002639C0 DA47            	  1652: 	add.w	d7,d5
+00:002639C2 43F900280134    	  1653: 	lea	T_VANISH,a1	; ARM $08000134 - 8*wait
+00:002639C8 7200            	  1654: 	moveq	#0,d1
+00:002639CA 3203            	  1655: 	move.w	d3,d1
+00:002639CC E789            	  1656: 	lsl.l	#3,d1
+00:002639CE 93C1            	  1657: 	suba.l	d1,a1
+00:002639D0 21590020        	  1658: 	move.l	(a1)+,O_SPR(a0)
+00:002639D4 21510024        	  1659: 	move.l	(a1),O_SPR+4(a0)
+00:002639D8 0268E0FF0020    	  1660: 	andi.w	#$e0ff,O_SPR(a0)
+00:002639DE 006817000020    	  1661: 	ori.w	#$1700,O_SPR(a0)
+00:002639E4 3004            	  1662: 	move.w	d4,d0
+00:002639E6 024007FF        	  1663: 	andi.w	#$7ff,d0
+00:002639EA 00408000        	  1664: 	ori.w	#$8000,d0
+00:002639EE 3140001C        	  1665: 	move.w	d0,O_SPRX(a0)
+00:002639F2 3005            	  1666: 	move.w	d5,d0
+00:002639F4 024003FF        	  1667: 	andi.w	#$3ff,d0
+00:002639F8 00408000        	  1668: 	ori.w	#$8000,d0
+00:002639FC 3140001E        	  1669: 	move.w	d0,O_SPRY(a0)
+00:00263A00 31440006        	  1670: 	move.w	d4,O_X(a0)
+00:00263A04 31450008        	  1671: 	move.w	d5,O_Y(a0)
+00:00263A08 30280010        	  1672: 	move.w	O_VX(a0),d0
+00:00263A0C D1680014        	  1673: 	add.w	d0,O_AX(a0)
+00:00263A10 30280012        	  1674: 	move.w	O_VY(a0),d0
+00:00263A14 D1680016        	  1675: 	add.w	d0,O_AY(a0)
+00:00263A18 4E75            	  1676: 	rts
+                            	  1677: 
+                            	  1678: ; ---------------------------------------------------------------------------
+                            	  1679: ; state 1: appear
+                            	  1680: ; ---------------------------------------------------------------------------
+                            	  1681: st1:
+00:00263A1A 47EB00EE        	  1682: 	lea	238(a3),a3		; [cyc] block
+00:00263A1E 30280032        	  1683: 	move.w	O_TIMER(a0),d0
+00:00263A22 670000DE        	  1684: 	beq	.go
+00:00263A26 47EB0148        	  1685: 	lea	328(a3),a3		; [cyc] fall-through
+00:00263A2A 5340            	  1686: 	subq.w	#1,d0
+00:00263A2C 31400032        	  1687: 	move.w	d0,O_TIMER(a0)
+00:00263A30 4A680028        	  1688: 	tst.w	O_WAIT(a0)
+00:00263A34 66000010        	  1689: 	bne	.w1
+00:00263A38 47EB0014        	  1690: 	lea	20(a3),a3		; [cyc] fall-through
+00:00263A3C 317C00010028    	  1691: 	move.w	#1,O_WAIT(a0)
+00:00263A42 60000006        	  1692: 	bra	.w2
+                            	  1693: .w1:
+00:00263A46 DF680008        	  1694: 	add.w	d7,O_Y(a0)
+                            	  1695: .w2:
+00:00263A4A 30280004        	  1696: 	move.w	O_SUB(a0),d0
+00:00263A4E 6600001A        	  1697: 	bne	.sub
+00:00263A52 47EBFEAC        	  1698: 	lea	-340(a3),a3		; [cyc] fall-through
+00:00263A56 43F900280100    	  1699: 	lea	T_1718,a1
+00:00263A5C 2159001C        	  1700: 	move.l	(a1)+,O_SPRX(a0)
+00:00263A60 21590020        	  1701: 	move.l	(a1)+,O_SPRX+4(a0)
+00:00263A64 21510024        	  1702: 	move.l	(a1),O_SPRX+8(a0)
+00:00263A68 4E75            	  1703: 	rts
+                            	  1704: .sub:
+00:00263A6A 7200            	  1705: 	moveq	#0,d1
+00:00263A6C 3228002A        	  1706: 	move.w	O_CNT(a0),d1
+00:00263A70 0C400002        	  1707: 	cmpi.w	#2,d0
+00:00263A74 6600000E        	  1708: 	bne	.dir
+00:00263A78 47EBFF92        	  1709: 	lea	-110(a3),a3		; [cyc] fall-through
+00:00263A7C 5268002A        	  1710: 	addq.w	#1,O_CNT(a0)
+00:00263A80 60000030        	  1711: 	bra	.idx
+                            	  1712: .dir:
+00:00263A84 342D0016        	  1713: 	move.w	SYS+$16(a5),d2
+00:00263A88 5242            	  1714: 	addq.w	#1,d2
+00:00263A8A 3B420016        	  1715: 	move.w	d2,SYS+$16(a5)
+00:00263A8E EF89            	  1716: 	lsl.l	#7,d1
+00:00263A90 7000            	  1717: 	moveq	#0,d0
+00:00263A92 10280019        	  1718: 	move.b	O_ANG(a0),d0
+00:00263A96 5840            	  1719: 	addq.w	#4,d0
+00:00263A98 024000FF        	  1720: 	andi.w	#$ff,d0
+00:00263A9C E648            	  1721: 	lsr.w	#3,d0
+00:00263A9E D040            	  1722: 	add.w	d0,d0
+00:00263AA0 D040            	  1723: 	add.w	d0,d0
+00:00263AA2 D280            	  1724: 	add.l	d0,d1
+00:00263AA4 028200000003    	  1725: 	andi.l	#3,d2
+00:00263AAA D282            	  1726: 	add.l	d2,d1
+00:00263AAC 02810000FFFF    	  1727: 	andi.l	#$ffff,d1
+                            	  1728: .idx:
+00:00263AB2 2001            	  1729: 	move.l	d1,d0
+00:00263AB4 E788            	  1730: 	lsl.l	#3,d0
+00:00263AB6 43F900286904    	  1731: 	lea	T_1720,a1
+00:00263ABC D3C0            	  1732: 	adda.l	d0,a1
+00:00263ABE 21590020        	  1733: 	move.l	(a1)+,O_SPR(a0)
+00:00263AC2 21510024        	  1734: 	move.l	(a1),O_SPR+4(a0)
+00:00263AC6 0268E0FF0020    	  1735: 	andi.w	#$e0ff,O_SPR(a0)
+00:00263ACC 006817000020    	  1736: 	ori.w	#$1700,O_SPR(a0)
+00:00263AD2 E589            	  1737: 	lsl.l	#2,d1
+00:00263AD4 43F900287C2C    	  1738: 	lea	T_171C,a1
+00:00263ADA D3C1            	  1739: 	adda.l	d1,a1
+00:00263ADC 30280006        	  1740: 	move.w	O_X(a0),d0
+00:00263AE0 9059            	  1741: 	sub.w	(a1)+,d0
+00:00263AE2 024007FF        	  1742: 	andi.w	#$7ff,d0
+00:00263AE6 00408000        	  1743: 	ori.w	#$8000,d0
+00:00263AEA 3140001C        	  1744: 	move.w	d0,O_SPRX(a0)
+00:00263AEE 30280008        	  1745: 	move.w	O_Y(a0),d0
+00:00263AF2 9051            	  1746: 	sub.w	(a1),d0
+00:00263AF4 024003FF        	  1747: 	andi.w	#$3ff,d0
+00:00263AF8 00408000        	  1748: 	ori.w	#$8000,d0
+00:00263AFC 3140001E        	  1749: 	move.w	d0,O_SPRY(a0)
+00:00263B00 4E75            	  1750: 	rts
+                            	  1751: .go:
+00:00263B02 4A680028        	  1752: 	tst.w	O_WAIT(a0)
+00:00263B06 6600000A        	  1753: 	bne	.g1
+00:00263B0A 47EB001A        	  1754: 	lea	26(a3),a3		; [cyc] fall-through
+00:00263B0E 9F680008        	  1755: 	sub.w	d7,O_Y(a0)
+                            	  1756: .g1:
+00:00263B12 4A6D0014        	  1757: 	tst.w	SYS+$14(a5)
+00:00263B16 6700000E        	  1758: 	beq	.g2
+00:00263B1A 47EB004C        	  1759: 	lea	76(a3),a3		; [cyc] fall-through
+00:00263B1E 6100F158        	  1760: 	bsr	vanish_40c
+00:00263B22 6000FE22        	  1761: 	bra	st3
+                            	  1762: .g2:
+00:00263B26 20280038        	  1763: 	move.l	O_SCRIPT(a0),d0
+00:00263B2A 66000010        	  1764: 	bne	.g3
+00:00263B2E 47EBFFE0        	  1765: 	lea	-32(a3),a3		; [cyc] fall-through
+00:00263B32 317CFFFF0032    	  1766: 	move.w	#$ffff,O_TIMER(a0)
+00:00263B38 60000018        	  1767: 	bra	.g4
+                            	  1768: .g3:
+00:00263B3C 2240            	  1769: 	movea.l	d0,a1
+00:00263B3E 7000            	  1770: 	moveq	#0,d0
+00:00263B40 1011            	  1771: 	move.b	(a1),d0	; ARM byte 1: repeat
+00:00263B42 31400028        	  1772: 	move.w	d0,O_WAIT(a0)
+00:00263B46 10290001        	  1773: 	move.b	1(a1),d0	; ARM byte 0: duration
+00:00263B4A 31400032        	  1774: 	move.w	d0,O_TIMER(a0)
+00:00263B4E 4268002A        	  1775: 	clr.w	O_CNT(a0)
+                            	  1776: .g4:
+00:00263B52 42680004        	  1777: 	clr.w	O_SUB(a0)
+00:00263B56 30BC0002        	  1778: 	move.w	#2,(a0)
+00:00263B5A 526D0006        	  1779: 	addq.w	#1,SYS+$06(a5)
+00:00263B5E 536D0004        	  1780: 	subq.w	#1,SYS+$04(a5)
+00:00263B62 6000F8C2        	  1781: 	bra	st2
+                            	  1782: 
+                            	  1783: ; ---------------------------------------------------------------------------
+                            	  1784: ; state 4: bouncing debris
+                            	  1785: ; ---------------------------------------------------------------------------
+                            	  1786: st4_vel:
+00:00263B66 53680032        	  1787: 	subq.w	#1,O_TIMER(a0)
+00:00263B6A 302D0086        	  1788: 	move.w	SYS+S_CNT86(a5),d0
+00:00263B6E 5240            	  1789: 	addq.w	#1,d0
+00:00263B70 3B400086        	  1790: 	move.w	d0,SYS+S_CNT86(a5)
+00:00263B74 02400003        	  1791: 	andi.w	#3,d0
+00:00263B78 D040            	  1792: 	add.w	d0,d0
+00:00263B7A D040            	  1793: 	add.w	d0,d0
+00:00263B7C 43F900287BEC    	  1794: 	lea	T_172C,a1
+00:00263B82 D2C0            	  1795: 	adda.w	d0,a1
+00:00263B84 4E75            	  1796: 	rts
+                            	  1797: 
+                            	  1798: st4:
+00:00263B86 47EB0166        	  1799: 	lea	358(a3),a3		; [cyc] block
+00:00263B8A 34280010        	  1800: 	move.w	O_VX(a0),d2	; vx
+00:00263B8E 36280012        	  1801: 	move.w	O_VY(a0),d3	; vy
+00:00263B92 38280014        	  1802: 	move.w	O_AX(a0),d4
+00:00263B96 D842            	  1803: 	add.w	d2,d4
+00:00263B98 3004            	  1804: 	move.w	d4,d0
+00:00263B9A 6A000016        	  1805: 	bpl	.p_17
+00:00263B9E 47EB0024        	  1806: 	lea	36(a3),a3		; [cyc] fall-through
+00:00263BA2 064400FF        	  1807: 	addi.w	#$ff,d4	; v < 0: q = (v + 255) >> 8, r = v - (v + 255 & $ff00)
+00:00263BA6 3204            	  1808: 	move.w	d4,d1
+00:00263BA8 0241FF00        	  1809: 	andi.w	#$ff00,d1
+00:00263BAC 9041            	  1810: 	sub.w	d1,d0
+00:00263BAE 60000006        	  1811: 	bra	.s_17
+                            	  1812: .p_17:
+00:00263BB2 024000FF        	  1813: 	andi.w	#$ff,d0	; v >= 0: q = v >> 8, r = v & $ff
+                            	  1814: .s_17:
+00:00263BB6 31400014        	  1815: 	move.w	d0,O_AX(a0)
+00:00263BBA E044            	  1816: 	asr.w	#8,d4
+00:00263BBC 3A280016        	  1817: 	move.w	O_AY(a0),d5
+00:00263BC0 DA43            	  1818: 	add.w	d3,d5
+00:00263BC2 3005            	  1819: 	move.w	d5,d0
+00:00263BC4 6A000016        	  1820: 	bpl	.p_18
+00:00263BC8 47EB0024        	  1821: 	lea	36(a3),a3		; [cyc] fall-through
+00:00263BCC 064500FF        	  1822: 	addi.w	#$ff,d5	; v < 0: q = (v + 255) >> 8, r = v - (v + 255 & $ff00)
+00:00263BD0 3205            	  1823: 	move.w	d5,d1
+00:00263BD2 0241FF00        	  1824: 	andi.w	#$ff00,d1
+00:00263BD6 9041            	  1825: 	sub.w	d1,d0
+00:00263BD8 60000006        	  1826: 	bra	.s_18
+                            	  1827: .p_18:
+00:00263BDC 024000FF        	  1828: 	andi.w	#$ff,d0	; v >= 0: q = v >> 8, r = v & $ff
+                            	  1829: .s_18:
+00:00263BE0 31400016        	  1830: 	move.w	d0,O_AY(a0)
+00:00263BE4 E045            	  1831: 	asr.w	#8,d5
+00:00263BE6 D8680006        	  1832: 	add.w	O_X(a0),d4
+00:00263BEA 31440006        	  1833: 	move.w	d4,O_X(a0)	; x
+00:00263BEE DA680008        	  1834: 	add.w	O_Y(a0),d5
+00:00263BF2 DA47            	  1835: 	add.w	d7,d5
+00:00263BF4 31450008        	  1836: 	move.w	d5,O_Y(a0)	; y
+00:00263BF8 4A680032        	  1837: 	tst.w	O_TIMER(a0)
+00:00263BFC 67000096        	  1838: 	beq	.nob
+00:00263C00 47EB0064        	  1839: 	lea	100(a3),a3		; [cyc] fall-through
+00:00263C04 4A42            	  1840: 	tst.w	d2
+00:00263C06 6E000026        	  1841: 	bgt	.right
+00:00263C0A 47EB000A        	  1842: 	lea	10(a3),a3		; [cyc] fall-through
+00:00263C0E 0C44000E        	  1843: 	cmpi.w	#$e,d4
+00:00263C12 6E00003A        	  1844: 	bgt	.vert
+00:00263C16 47EB008E        	  1845: 	lea	142(a3),a3		; [cyc] fall-through
+00:00263C1A 6100FF4A        	  1846: 	bsr	st4_vel	; left edge
+00:00263C1E 31590010        	  1847: 	move.w	(a1)+,O_VX(a0)
+00:00263C22 3011            	  1848: 	move.w	(a1),d0
+00:00263C24 4440            	  1849: 	neg.w	d0
+00:00263C26 31400012        	  1850: 	move.w	d0,O_VY(a0)
+00:00263C2A 600000C4        	  1851: 	bra	.draw
+                            	  1852: .right:
+00:00263C2E 0C4401B2        	  1853: 	cmpi.w	#$1b2,d4
+00:00263C32 6D00001A        	  1854: 	blt	.vert
+00:00263C36 47EB008E        	  1855: 	lea	142(a3),a3		; [cyc] fall-through
+00:00263C3A 6100FF2A        	  1856: 	bsr	st4_vel	; right edge
+00:00263C3E 3019            	  1857: 	move.w	(a1)+,d0
+00:00263C40 4440            	  1858: 	neg.w	d0
+00:00263C42 31400010        	  1859: 	move.w	d0,O_VX(a0)
+00:00263C46 31510012        	  1860: 	move.w	(a1),O_VY(a0)
+00:00263C4A 600000A4        	  1861: 	bra	.draw
+                            	  1862: .vert:
+00:00263C4E 4A43            	  1863: 	tst.w	d3
+00:00263C50 6E00001E        	  1864: 	bgt	.down
+00:00263C54 47EB000A        	  1865: 	lea	10(a3),a3		; [cyc] fall-through
+00:00263C58 0C45000D        	  1866: 	cmpi.w	#$d,d5
+00:00263C5C 6C000092        	  1867: 	bge	.draw
+00:00263C60 47EB009E        	  1868: 	lea	158(a3),a3		; [cyc] fall-through
+00:00263C64 6100FF00        	  1869: 	bsr	st4_vel	; top edge
+00:00263C68 21510010        	  1870: 	move.l	(a1),O_VX(a0)
+00:00263C6C 60000082        	  1871: 	bra	.draw
+                            	  1872: .down:
+00:00263C70 0C4500D3        	  1873: 	cmpi.w	#$d3,d5
+00:00263C74 6F00007A        	  1874: 	ble	.draw
+00:00263C78 47EB00B6        	  1875: 	lea	182(a3),a3		; [cyc] fall-through
+00:00263C7C 6100FEE8        	  1876: 	bsr	st4_vel	; bottom edge
+00:00263C80 3019            	  1877: 	move.w	(a1)+,d0
+00:00263C82 4440            	  1878: 	neg.w	d0
+00:00263C84 31400010        	  1879: 	move.w	d0,O_VX(a0)
+00:00263C88 3011            	  1880: 	move.w	(a1),d0
+00:00263C8A 4440            	  1881: 	neg.w	d0
+00:00263C8C 31400012        	  1882: 	move.w	d0,O_VY(a0)
+00:00263C90 6000005E        	  1883: 	bra	.draw
+                            	  1884: .nob:
+00:00263C94 4A42            	  1885: 	tst.w	d2	; no bounces left: die once off screen
+00:00263C96 6E000016        	  1886: 	bgt	.nr
+00:00263C9A 47EB000A        	  1887: 	lea	10(a3),a3		; [cyc] fall-through
+00:00263C9E 0C44FFF2        	  1888: 	cmpi.w	#-$e,d4
+00:00263CA2 6F00003C        	  1889: 	ble	.die
+00:00263CA6 47EB006E        	  1890: 	lea	110(a3),a3		; [cyc] fall-through
+00:00263CAA 6000000E        	  1891: 	bra	.ny
+                            	  1892: .nr:
+00:00263CAE 0C4401CE        	  1893: 	cmpi.w	#$1ce,d4
+00:00263CB2 6C00002C        	  1894: 	bge	.die
+00:00263CB6 47EB0064        	  1895: 	lea	100(a3),a3		; [cyc] fall-through
+                            	  1896: .ny:
+00:00263CBA 4A43            	  1897: 	tst.w	d3
+00:00263CBC 6E000016        	  1898: 	bgt	.nd
+00:00263CC0 47EB000A        	  1899: 	lea	10(a3),a3		; [cyc] fall-through
+00:00263CC4 0C45FFF4        	  1900: 	cmpi.w	#-$c,d5
+00:00263CC8 6E000026        	  1901: 	bgt	.draw
+00:00263CCC 47EBFFDA        	  1902: 	lea	-38(a3),a3		; [cyc] fall-through
+00:00263CD0 6000000E        	  1903: 	bra	.die
+                            	  1904: .nd:
+00:00263CD4 0C4500EC        	  1905: 	cmpi.w	#$ec,d5
+00:00263CD8 6D000016        	  1906: 	blt	.draw
+00:00263CDC 47EBFFD0        	  1907: 	lea	-48(a3),a3		; [cyc] fall-through
+                            	  1908: .die:
+00:00263CE0 536D0002        	  1909: 	subq.w	#1,SYS+$02(a5)	; $528
+00:00263CE4 536D000A        	  1910: 	subq.w	#1,SYS+$0a(a5)
+00:00263CE8 536D000E        	  1911: 	subq.w	#1,SYS+$0e(a5)
+00:00263CEC 4250            	  1912: 	clr.w	(a0)
+00:00263CEE 4E75            	  1913: 	rts
+                            	  1914: .draw:
+00:00263CF0 3004            	  1915: 	move.w	d4,d0
+00:00263CF2 0440000E        	  1916: 	subi.w	#$e,d0
+00:00263CF6 024007FF        	  1917: 	andi.w	#$7ff,d0
+00:00263CFA 00408000        	  1918: 	ori.w	#$8000,d0
+00:00263CFE 3140001C        	  1919: 	move.w	d0,O_SPRX(a0)
+00:00263D02 3005            	  1920: 	move.w	d5,d0
+00:00263D04 0440000F        	  1921: 	subi.w	#$f,d0
+00:00263D08 024003FF        	  1922: 	andi.w	#$3ff,d0
+00:00263D0C 00408000        	  1923: 	ori.w	#$8000,d0
+00:00263D10 3140001E        	  1924: 	move.w	d0,O_SPRY(a0)
+00:00263D14 6000F604        	  1925: 	bra	anim_up
+                            	  1926: 
+                            	  1927: ; ---------------------------------------------------------------------------
+                            	  1928: ; state 5: falling debris
+                            	  1929: ; ---------------------------------------------------------------------------
+                            	  1930: st5:
+00:00263D18 47EB018A        	  1931: 	lea	394(a3),a3		; [cyc] block
+00:00263D1C 38280014        	  1932: 	move.w	O_AX(a0),d4
+00:00263D20 D8680010        	  1933: 	add.w	O_VX(a0),d4
+00:00263D24 3004            	  1934: 	move.w	d4,d0
+00:00263D26 6A000016        	  1935: 	bpl	.p_19
+00:00263D2A 47EB0024        	  1936: 	lea	36(a3),a3		; [cyc] fall-through
+00:00263D2E 064400FF        	  1937: 	addi.w	#$ff,d4	; v < 0: q = (v + 255) >> 8, r = v - (v + 255 & $ff00)
+00:00263D32 3204            	  1938: 	move.w	d4,d1
+00:00263D34 0241FF00        	  1939: 	andi.w	#$ff00,d1
+00:00263D38 9041            	  1940: 	sub.w	d1,d0
+00:00263D3A 60000006        	  1941: 	bra	.s_19
+                            	  1942: .p_19:
+00:00263D3E 024000FF        	  1943: 	andi.w	#$ff,d0	; v >= 0: q = v >> 8, r = v & $ff
+                            	  1944: .s_19:
+00:00263D42 31400014        	  1945: 	move.w	d0,O_AX(a0)
+00:00263D46 E044            	  1946: 	asr.w	#8,d4
+00:00263D48 3A280016        	  1947: 	move.w	O_AY(a0),d5
+00:00263D4C DA680012        	  1948: 	add.w	O_VY(a0),d5
+00:00263D50 3005            	  1949: 	move.w	d5,d0
+00:00263D52 6A000016        	  1950: 	bpl	.p_20
+00:00263D56 47EB0024        	  1951: 	lea	36(a3),a3		; [cyc] fall-through
+00:00263D5A 064500FF        	  1952: 	addi.w	#$ff,d5	; v < 0: q = (v + 255) >> 8, r = v - (v + 255 & $ff00)
+00:00263D5E 3205            	  1953: 	move.w	d5,d1
+00:00263D60 0241FF00        	  1954: 	andi.w	#$ff00,d1
+00:00263D64 9041            	  1955: 	sub.w	d1,d0
+00:00263D66 60000006        	  1956: 	bra	.s_20
+                            	  1957: .p_20:
+00:00263D6A 024000FF        	  1958: 	andi.w	#$ff,d0	; v >= 0: q = v >> 8, r = v & $ff
+                            	  1959: .s_20:
+00:00263D6E 31400016        	  1960: 	move.w	d0,O_AY(a0)
+00:00263D72 E045            	  1961: 	asr.w	#8,d5
+00:00263D74 D8680006        	  1962: 	add.w	O_X(a0),d4
+00:00263D78 31440006        	  1963: 	move.w	d4,O_X(a0)
+00:00263D7C B868002E        	  1964: 	cmp.w	O_FLAG(a0),d4
+00:00263D80 6E000012        	  1965: 	bgt	.alive
+00:00263D84 47EBFF92        	  1966: 	lea	-110(a3),a3		; [cyc] fall-through
+00:00263D88 536D0002        	  1967: 	subq.w	#1,SYS+$02(a5)	; $500
+00:00263D8C 536D0010        	  1968: 	subq.w	#1,SYS+$10(a5)
+00:00263D90 4250            	  1969: 	clr.w	(a0)
+00:00263D92 4E75            	  1970: 	rts
+                            	  1971: .alive:
+00:00263D94 046800100010    	  1972: 	subi.w	#$10,O_VX(a0)
+00:00263D9A DA680008        	  1973: 	add.w	O_Y(a0),d5
+00:00263D9E DA47            	  1974: 	add.w	d7,d5
+00:00263DA0 31450008        	  1975: 	move.w	d5,O_Y(a0)
+00:00263DA4 3004            	  1976: 	move.w	d4,d0
+00:00263DA6 90680040        	  1977: 	sub.w	O_OX(a0),d0
+00:00263DAA 024007FF        	  1978: 	andi.w	#$7ff,d0
+00:00263DAE 00408000        	  1979: 	ori.w	#$8000,d0
+00:00263DB2 3140001C        	  1980: 	move.w	d0,O_SPRX(a0)
+00:00263DB6 3005            	  1981: 	move.w	d5,d0
+00:00263DB8 90680042        	  1982: 	sub.w	O_OY(a0),d0
+00:00263DBC 024003FF        	  1983: 	andi.w	#$3ff,d0
+00:00263DC0 00408000        	  1984: 	ori.w	#$8000,d0
+00:00263DC4 3140001E        	  1985: 	move.w	d0,O_SPRY(a0)
+00:00263DC8 53680036        	  1986: 	subq.w	#1,O_ACNT(a0)	; anim_down, inline
+00:00263DCC 65000004        	  1987: 	bcs	.cyc_stub298	; @unlikely
+00:00263DD0 4E75            	  1988: 	rts
+                            	  1989: .cyc_stub298:
+00:00263DD2 47EB00EA        	  1990: 	lea	234(a3),a3		; [cyc] unlikely edge
+00:00263DD6 6000F522        	  1991: 	bra	anim_down_f
+                            	  1992: 
+                            	  1993: ; ---------------------------------------------------------------------------
+                            	  1994: ; states 6 / 7: items moving with the background
+                            	  1995: ; ---------------------------------------------------------------------------
+                            	  1996: item_move:
+00:00263DDA 4A680032        	  1997: 	tst.w	O_TIMER(a0)
+00:00263DDE 6700000C        	  1998: 	beq	.m
+00:00263DE2 47EBFFD4        	  1999: 	lea	-44(a3),a3		; [cyc] fall-through
+00:00263DE6 42680032        	  2000: 	clr.w	O_TIMER(a0)
+00:00263DEA 4E75            	  2001: 	rts
+                            	  2002: .m:
+00:00263DEC 302D2298        	  2003: 	move.w	GLOB+8(a5),d0
+00:00263DF0 0C680002003C    	  2004: 	cmpi.w	#2,O_P1E(a0)
+00:00263DF6 6600000A        	  2005: 	bne	.s
+00:00263DFA 47EB0016        	  2006: 	lea	22(a3),a3		; [cyc] fall-through
+00:00263DFE 302D229A        	  2007: 	move.w	GLOB+10(a5),d0
+                            	  2008: .s:
+00:00263E02 D1680006        	  2009: 	add.w	d0,O_X(a0)
+00:00263E06 DF680008        	  2010: 	add.w	d7,O_Y(a0)
+00:00263E0A 4E75            	  2011: 	rts
+                            	  2012: 
+                            	  2013: st6:
+00:00263E0C 47EB0150        	  2014: 	lea	336(a3),a3		; [cyc] block
+00:00263E10 6100FFC8        	  2015: 	bsr	item_move
+00:00263E14 38280006        	  2016: 	move.w	O_X(a0),d4
+00:00263E18 0C44FFF2        	  2017: 	cmpi.w	#-$e,d4
+00:00263E1C 6F000032        	  2018: 	ble	.die
+00:00263E20 47EBFFF0        	  2019: 	lea	-16(a3),a3		; [cyc] fall-through
+00:00263E24 3A280008        	  2020: 	move.w	O_Y(a0),d5
+00:00263E28 3004            	  2021: 	move.w	d4,d0
+00:00263E2A 0440000E        	  2022: 	subi.w	#$e,d0
+00:00263E2E 024007FF        	  2023: 	andi.w	#$7ff,d0
+00:00263E32 00408000        	  2024: 	ori.w	#$8000,d0
+00:00263E36 3140001C        	  2025: 	move.w	d0,O_SPRX(a0)
+00:00263E3A 3005            	  2026: 	move.w	d5,d0
+00:00263E3C 0440000F        	  2027: 	subi.w	#$f,d0
+00:00263E40 024003FF        	  2028: 	andi.w	#$3ff,d0
+00:00263E44 00408000        	  2029: 	ori.w	#$8000,d0
+00:00263E48 3140001E        	  2030: 	move.w	d0,O_SPRY(a0)
+00:00263E4C 6000F4CC        	  2031: 	bra	anim_up
+                            	  2032: .die:
+00:00263E50 536D0002        	  2033: 	subq.w	#1,SYS+$02(a5)	; $4B4
+00:00263E54 536D000C        	  2034: 	subq.w	#1,SYS+$0c(a5)
+00:00263E58 536D000A        	  2035: 	subq.w	#1,SYS+$0a(a5)
+00:00263E5C 6100EE26        	  2036: 	bsr	push_removed
+00:00263E60 4250            	  2037: 	clr.w	(a0)
+00:00263E62 4E75            	  2038: 	rts
+                            	  2039: 
+                            	  2040: st7:
+00:00263E64 47EB0142        	  2041: 	lea	322(a3),a3		; [cyc] block
+00:00263E68 6100FF70        	  2042: 	bsr	item_move
+00:00263E6C 38280006        	  2043: 	move.w	O_X(a0),d4
+00:00263E70 B868002E        	  2044: 	cmp.w	O_FLAG(a0),d4
+00:00263E74 6E000016        	  2045: 	bgt	.alive
+00:00263E78 47EB000C        	  2046: 	lea	12(a3),a3		; [cyc] fall-through
+00:00263E7C 536D0002        	  2047: 	subq.w	#1,SYS+$02(a5)	; $474
+00:00263E80 536D000C        	  2048: 	subq.w	#1,SYS+$0c(a5)
+00:00263E84 6100EDFE        	  2049: 	bsr	push_removed
+00:00263E88 4250            	  2050: 	clr.w	(a0)
+00:00263E8A 4E75            	  2051: 	rts
+                            	  2052: .alive:
+00:00263E8C 3A280008        	  2053: 	move.w	O_Y(a0),d5
+00:00263E90 3004            	  2054: 	move.w	d4,d0
+00:00263E92 90680040        	  2055: 	sub.w	O_OX(a0),d0
+00:00263E96 024007FF        	  2056: 	andi.w	#$7ff,d0
+00:00263E9A 00408000        	  2057: 	ori.w	#$8000,d0
+00:00263E9E 3140001C        	  2058: 	move.w	d0,O_SPRX(a0)
+00:00263EA2 3005            	  2059: 	move.w	d5,d0
+00:00263EA4 90680042        	  2060: 	sub.w	O_OY(a0),d0
+00:00263EA8 024003FF        	  2061: 	andi.w	#$3ff,d0
+00:00263EAC 00408000        	  2062: 	ori.w	#$8000,d0
+00:00263EB0 3140001E        	  2063: 	move.w	d0,O_SPRY(a0)
+00:00263EB4 6000F432        	  2064: 	bra	anim_down
+                            	  2065: 
 
 Source: "hle/hle.s"
                             	   444: 
@@ -3810,7 +3849,6 @@ S_LATCHED                        E:0000001A
 S_REMOVED                        E:0000001C
 S_REMOVED_N                      E:00000018
 S_SEARCH                         E:00000088
-TMP                              E:00002390
 T_1714                           E:0028010C
 T_1718                           E:00280100
 T_171C                           E:00287C2C
@@ -3827,9 +3865,10 @@ UPD_DEAD                         E:00000024
 UPD_HIGH                         E:00000046
 UPD_LIVE                         E:00000062
 VBLCNT                           E:0080ED38
-aim                              A:0026339A
-anim_down                        A:002632B4
-anim_up                          A:002632E6
+aim                              A:002633CE
+anim_down                        A:002632E8
+anim_down_f                      A:002632FA
+anim_up                          A:0026331A
 cmd_01                           A:0026279E
 cmd_02                           A:0026279E
 cmd_03                           A:002627A0
@@ -3843,13 +3882,13 @@ cmd_14                           A:002627D0
 cmd_16                           A:002627CA
 cmd_none                         A:0026279E
 copy_anim_1800                   A:00262C9A
-debris4_init                     A:00262F36
-dir_anim                         A:0026331C
-est_animate                      A:0026325A
+debris4_init                     A:00262F6A
+dir_anim                         A:00263350
+est_animate                      A:0026328E
 est_requests                     A:00262AEA
 est_results                      A:00262890
 est_start                        A:00262876
-est_update                       A:002631F0
+est_update                       A:00263224
 find_free                        A:00262B4C
 halve_vanish                     A:00262C30
 hle_idle                         A:00262416
@@ -3858,30 +3897,30 @@ hle_pack                         A:002626DE
 hle_reset                        A:002626EE
 hle_run_job                      A:002627E2
 hle_send                         A:00262000
-item_move                        A:00263D98
-op_accadd                        A:002637DA
-op_aim                           A:002637C8
-op_aimturn                       A:00263784
-op_ang                           A:002636EA
-op_ang_saved                     A:0026374C
-op_angadd                        A:002636BE
-op_angrnd                        A:0026370A
-op_angset                        A:002636E2
-op_angspd                        A:0026376A
-op_angspread                     A:00263726
-op_angsub                        A:002636D0
-op_flag0                         A:002635C6
-op_flag1                         A:002635B8
-op_kill                          A:0026359C
-op_loop                          A:002635D2
-op_spd                           A:002636A8
-op_spdadd                        A:00263680
-op_spdset                        A:002636A0
-op_spdsub                        A:00263690
-op_type                          A:0026362A
-op_vanish                        A:002635AC
+item_move                        A:00263DDA
+op_accadd                        A:0026380E
+op_aim                           A:002637FC
+op_aimturn                       A:002637B8
+op_ang                           A:0026371E
+op_ang_saved                     A:00263780
+op_angadd                        A:002636F2
+op_angrnd                        A:0026373E
+op_angset                        A:00263716
+op_angspd                        A:0026379E
+op_angspread                     A:0026375A
+op_angsub                        A:00263704
+op_flag0                         A:002635FA
+op_flag1                         A:002635EC
+op_kill                          A:002635D0
+op_loop                          A:00263606
+op_spd                           A:002636DC
+op_spdadd                        A:002636B4
+op_spdset                        A:002636D4
+op_spdsub                        A:002636C4
+op_type                          A:0026365E
+op_vanish                        A:002635E0
 push_removed                     A:00262C84
-rng                              A:00263340
+rng                              A:00263374
 set_acc                          A:00262B90
 set_vel                          A:00262B98
 set_vxy                          A:00262B9C
@@ -3904,34 +3943,35 @@ snd_17                           A:002621BC
 snd_none                         A:00262066
 sp_bullet                        A:00262CCA
 sp_clearlow                      A:00262DC0
-sp_debris                        A:00262FF6
-sp_falling                       A:0026301C
-sp_item6                         A:002630C6
-sp_item7                         A:0026310E
+sp_debris                        A:0026302A
+sp_falling                       A:00263050
+sp_item6                         A:002630FA
+sp_item7                         A:00263142
 sp_kill                          A:00262D8C
-sp_multidebris                   A:00262F90
-sp_removeitem                    A:002631A4
+sp_multidebris                   A:00262FC4
+sp_removeitem                    A:002631D8
 sp_setsub                        A:00262DAC
-sp_stopbounce                    A:002631C4
+sp_stopbounce                    A:002631F8
 sp_todebris                      A:00262E52
 sp_vanish                        A:00262D9C
 sp_vanishall                     A:00262DEA
 sp_vanishtype                    A:00262E16
-st1                              A:002639E6
-st2                              A:002633F2
-st2_advance                      A:00263810
-st2_after                        A:002637EE
-st2_exec                         A:00263552
-st2_frame                        A:002638C2
-st2_ops                          A:00263574
-st2_script                       A:002634F4
-st2_timer                        A:00263828
-st3                              A:00263912
-st4                              A:00263B52
-st4_vel                          A:00263B32
-st5                              A:00263CE4
-st6                              A:00263DCA
-st7                              A:00263E22
+st1                              A:00263A1A
+st2                              A:00263426
+st2_advance                      A:00263844
+st2_after                        A:00263822
+st2_exec                         A:00263586
+st2_frame                        A:002638F6
+st2_ops                          A:002635A8
+st2_script                       A:00263528
+st2_timer                        A:0026385C
+st3                              A:00263946
+st4                              A:00263B86
+st4_vel                          A:00263B66
+st5                              A:00263D18
+st6                              A:00263E0C
+st7                              A:00263E64
+todebris_entry                   A:00262F48
 vanish_3a4                       A:00262C6C
 vanish_40c                       A:00262C78
 
@@ -4015,7 +4055,6 @@ Symbols by value:
 0000238A PENDING
 0000238C E14
 0000238E REQN
-00002390 TMP
 00002392 PROBE
 000023A2 DEBT
 000023A6 BOOTED
@@ -4079,58 +4118,60 @@ Symbols by value:
 00262DEA sp_vanishall
 00262E16 sp_vanishtype
 00262E52 sp_todebris
-00262F36 debris4_init
-00262F90 sp_multidebris
-00262FF6 sp_debris
-0026301C sp_falling
-002630C6 sp_item6
-0026310E sp_item7
-002631A4 sp_removeitem
-002631C4 sp_stopbounce
-002631F0 est_update
-0026325A est_animate
-002632B4 anim_down
-002632E6 anim_up
-0026331C dir_anim
-00263340 rng
-0026339A aim
-002633F2 st2
-002634F4 st2_script
-00263552 st2_exec
-00263574 st2_ops
-0026359C op_kill
-002635AC op_vanish
-002635B8 op_flag1
-002635C6 op_flag0
-002635D2 op_loop
-0026362A op_type
-00263680 op_spdadd
-00263690 op_spdsub
-002636A0 op_spdset
-002636A8 op_spd
-002636BE op_angadd
-002636D0 op_angsub
-002636E2 op_angset
-002636EA op_ang
-0026370A op_angrnd
-00263726 op_angspread
-0026374C op_ang_saved
-0026376A op_angspd
-00263784 op_aimturn
-002637C8 op_aim
-002637DA op_accadd
-002637EE st2_after
-00263810 st2_advance
-00263828 st2_timer
-002638C2 st2_frame
-00263912 st3
-002639E6 st1
-00263B32 st4_vel
-00263B52 st4
-00263CE4 st5
-00263D98 item_move
-00263DCA st6
-00263E22 st7
+00262F48 todebris_entry
+00262F6A debris4_init
+00262FC4 sp_multidebris
+0026302A sp_debris
+00263050 sp_falling
+002630FA sp_item6
+00263142 sp_item7
+002631D8 sp_removeitem
+002631F8 sp_stopbounce
+00263224 est_update
+0026328E est_animate
+002632E8 anim_down
+002632FA anim_down_f
+0026331A anim_up
+00263350 dir_anim
+00263374 rng
+002633CE aim
+00263426 st2
+00263528 st2_script
+00263586 st2_exec
+002635A8 st2_ops
+002635D0 op_kill
+002635E0 op_vanish
+002635EC op_flag1
+002635FA op_flag0
+00263606 op_loop
+0026365E op_type
+002636B4 op_spdadd
+002636C4 op_spdsub
+002636D4 op_spdset
+002636DC op_spd
+002636F2 op_angadd
+00263704 op_angsub
+00263716 op_angset
+0026371E op_ang
+0026373E op_angrnd
+0026375A op_angspread
+00263780 op_ang_saved
+0026379E op_angspd
+002637B8 op_aimturn
+002637FC op_aim
+0026380E op_accadd
+00263822 st2_after
+00263844 st2_advance
+0026385C st2_timer
+002638F6 st2_frame
+00263946 st3
+00263A1A st1
+00263B66 st4_vel
+00263B86 st4
+00263D18 st5
+00263DDA item_move
+00263E0C st6
+00263E64 st7
 00270000 SINTAB
 00270400 AIMTAB
 00271800 CTRLPTR

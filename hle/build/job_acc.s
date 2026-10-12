@@ -625,7 +625,16 @@ sp_vanishtype:
 
 ; id 7: every scripted bullet becomes falling debris, appearing ones vanish ($1E34)
 sp_todebris:
-	lea	174(a3),a3		; [cyc] block
+	; Converts every state-2 bullet (126 at a boss's death): the per-object work is kept
+	; in registers and adjacent fields are written as longs.
+	;   d7 = state 5 : type (O_STATE, O_TYPE)     a6 = base : limit (O_ABASE, O_FLAG)
+	;   d6 = counter S_CNT82                      d3 = current frame (S_CNT84 & $f)
+	;   a1 = animation entry of the current frame, T_ANIM + 8*(base + frame) as
+	;        copy_anim_1800 computes it, and d2 = its first word (|$1800) : base.
+	; The entry only changes with the frame, every 4th object. The counters are stored back
+	; after the loop; nothing reads them in between.
+	lea	334(a3),a3		; [cyc] block
+	moveq	#0,d7
 	move.w	2(a2),d7	; type
 	moveq	#0,d2
 	move.w	d7,d2
@@ -636,63 +645,88 @@ sp_todebris:
 	move.w	d7,d3
 	add.w	d3,d3
 	lea	T_19C8,a1
-	move.w	(a1,d3.w),TMP(a5)	; limit
 	move.w	d7,d2
 	lsl.w	#5,d2
 	addi.w	#$24,d2	; animation base
+	move.w	d2,d0
+	swap	d0
+	move.w	(a1,d3.w),d0	; limit
+	movea.l	d0,a6
+	ori.l	#$50000,d7
+	moveq	#0,d3
 	move.w	SYS+S_CNT84(a5),d3
 	andi.w	#$f,d3	; current frame
+	bsr	todebris_entry
+	move.w	SYS+S_CNT82(a5),d6
 	lea	POOL(a5),a0
 	moveq	#NOBJ-1,d5
 .l:
-	lea	528(a3),a3		; [cyc] block
+	lea	316(a3),a3		; [cyc] block
 	move.w	(a0),d0
 	cmpi.w	#2,d0
 	beq	.conv
-	lea	-448(a3),a3		; [cyc] fall-through
+	lea	-236(a3),a3		; [cyc] fall-through
 	cmpi.w	#1,d0
 	bne	.n
 	lea	32(a3),a3		; [cyc] fall-through
 	clr.w	(a0)
 	bra	.n
 .conv:
-	move.w	#5,(a0)
-	move.w	d7,O_TYPE(a0)
+	move.l	d7,(a0)	; state 5, type
+	move.l	a6,O_ABASE(a0)	; animation base, limit
 	move.w	d3,O_AFRAME(a0)
-	move.w	d2,O_ABASE(a0)
-	move.w	SYS+S_CNT82(a5),d1
-	addq.w	#1,d1
-	move.w	d1,SYS+S_CNT82(a5)
+	addq.w	#1,d6
+	move.w	d6,d1
 	andi.w	#3,d1
 	bne	.anim
-	lea	-176(a3),a3		; [cyc] fall-through
+	lea	108(a3),a3		; [cyc] fall-through
 	move.w	SYS+S_CNT84(a5),d3
 	addq.w	#1,d3
 	move.w	d3,SYS+S_CNT84(a5)
 	andi.w	#$f,d3
+	bsr	todebris_entry
 	bra	.set
 .anim:
-	movem.l	d1/d2,-(sp)
-	move.w	d3,d0
-	bsr	copy_anim_1800	; uses O_ABASE (= d2) + frame d0
-	movem.l	(sp)+,d1/d2
+	swap	d2	; copy_anim_1800 with the current frame
+	move.w	d2,O_SPR(a0)
+	swap	d2
+	move.w	2(a1),O_SPR+2(a0)
+	move.l	4(a1),O_SPR+4(a0)
 .set:
 	move.w	d1,O_ACNT(a0)
+	move.w	O_VY(a0),d0	; VX : VY
+	andi.w	#$f,d0
+	subq.w	#7,d0
+	swap	d0
 	move.w	d1,d0
 	lsl.w	#6,d0
 	subi.w	#$40,d0
-	move.w	d0,O_VX(a0)
-	move.w	O_VY(a0),d0
-	andi.w	#$f,d0
-	subq.w	#7,d0
-	move.w	d0,O_VY(a0)
+	swap	d0
+	move.l	d0,O_VX(a0)
 	clr.l	O_AX(a0)	; AX and AY
 	move.l	d4,O_OX(a0)
-	move.w	TMP(a5),O_FLAG(a0)
 .n:
 	lea	OBJ_SIZE(a0),a0
 	dbra	d5,.l
-	lea	28(a3),a3		; [cyc] fall-through
+	lea	40(a3),a3		; [cyc] fall-through
+	move.w	d6,SYS+S_CNT82(a5)
+	rts
+
+; todebris_entry: a1 = T_ANIM + 8*(d2.w + d3), 32-bit like copy_anim_1800 (d3: upper word
+; 0); high word of d2 = the entry's first word with the copy_anim_1800 mask
+todebris_entry:
+	moveq	#0,d0
+	move.w	d2,d0
+	add.l	d3,d0
+	lsl.l	#3,d0
+	lea	T_ANIM,a1
+	adda.l	d0,a1
+	move.w	(a1),d0
+	andi.w	#$e0ff,d0
+	ori.w	#$1800,d0
+	swap	d2
+	move.w	d0,d2
+	swap	d2
 	rts
 
 ; debris4_init: a0 = slot, d7 = type, d4 = x:y, d2 = animation base
@@ -1012,12 +1046,12 @@ est_animate:
 ; ---------------------------------------------------------------------------
 anim_down:
 	subq.w	#1,O_ACNT(a0)	; counter at 0: it wraps (carry), reload below
-	bcs	.cyc_stub141	; @unlikely
+	bcs	.cyc_stub142	; @unlikely
 	rts
-.cyc_stub141:
+.cyc_stub142:
 	lea	234(a3),a3		; [cyc] unlikely edge
-	bra	.f
-.f:
+	bra	anim_down_f
+anim_down_f:
 	move.w	#3,O_ACNT(a0)
 	move.w	O_AFRAME(a0),d0
 	move.w	d0,d1
@@ -1031,9 +1065,9 @@ anim_down:
 
 anim_up:
 	subq.w	#1,O_ACNT(a0)
-	bcs	.cyc_stub146	; @unlikely
+	bcs	.cyc_stub147	; @unlikely
 	rts
-.cyc_stub146:
+.cyc_stub147:
 	lea	238(a3),a3		; [cyc] unlikely edge
 	bra	.f
 .f:
@@ -1139,7 +1173,7 @@ aim:
 st2:
 	lea	448(a3),a3		; [cyc] block
 	move.w	O_TIMER(a0),d0
-	beq	.cyc_stub165	; @unlikely
+	beq	.cyc_stub166	; @unlikely
 	; Fast path (instruction still running): st2_timer's work with the velocity added
 	; to the remainder while it is in a register (taken back if the bullet dies), and
 	; the four bounds as two unsigned ranges: -9 < y < $E8, -9 < x <= $1C7.
@@ -1154,7 +1188,7 @@ st2:
 	andi.w	#$ff00,d1
 	sub.w	d1,d0
 	bra	.s_9
-.cyc_stub165:
+.cyc_stub166:
 	lea	132(a3),a3		; [cyc] unlikely edge
 	bra	st2_script
 .p_9:
@@ -1184,11 +1218,11 @@ st2:
 	move.w	d5,d0
 	addq.w	#8,d0
 	cmpi.w	#$e8+8,d0
-	bcc	.cyc_stub172	; @unlikely
+	bcc	.cyc_stub173	; @unlikely
 	move.w	d4,d0
 	addq.w	#8,d0
 	cmpi.w	#$1c8+8,d0
-	bcc	.cyc_stub173	; @unlikely
+	bcc	.cyc_stub174	; @unlikely
 .on:
 	move.w	d4,d0
 	sub.w	O_OX(a0),d0
@@ -1203,15 +1237,15 @@ st2:
 	move.w	d4,O_X(a0)
 	move.w	d5,O_Y(a0)
 	subq.w	#1,O_ACNT(a0)	; counter at 0: it wraps (carry), reloaded by st2_frame
-	bcs	.cyc_stub174	; @unlikely
+	bcs	.cyc_stub175	; @unlikely
 	rts
-.cyc_stub172:
+.cyc_stub173:
 	lea	10(a3),a3		; [cyc] unlikely edge
 	bra	.off
-.cyc_stub173:
+.cyc_stub174:
 	lea	38(a3),a3		; [cyc] unlikely edge
 	bra	.off
-.cyc_stub174:
+.cyc_stub175:
 	lea	228(a3),a3		; [cyc] unlikely edge
 	bra	st2_frame
 .off:
@@ -1499,13 +1533,13 @@ st2_advance:
 st2_timer:
 	move.w	d0,O_TIMER(a0)
 	cmpi.w	#-9,d5
-	ble	.cyc_stub223	; @unlikely
+	ble	.cyc_stub224	; @unlikely
 	cmpi.w	#$e8,d5
-	bge	.cyc_stub224	; @unlikely
+	bge	.cyc_stub225	; @unlikely
 	cmpi.w	#-9,d4
 	ble	.off	; @unlikely
 	cmpi.w	#$1c7,d4
-	bgt	.cyc_stub226	; @unlikely
+	bgt	.cyc_stub227	; @unlikely
 .on:
 	move.w	d4,d0
 	sub.w	O_OX(a0),d0
@@ -1524,18 +1558,18 @@ st2_timer:
 	move.w	O_VY(a0),d0
 	add.w	d0,O_AY(a0)
 	subq.w	#1,O_ACNT(a0)
-	bcs	.cyc_stub227	; @unlikely
+	bcs	.cyc_stub228	; @unlikely
 	rts
-.cyc_stub223:
+.cyc_stub224:
 	lea	-22(a3),a3		; [cyc] unlikely edge
 	bra	.off
-.cyc_stub224:
+.cyc_stub225:
 	lea	-2(a3),a3		; [cyc] unlikely edge
 	bra	.off
-.cyc_stub226:
+.cyc_stub227:
 	lea	38(a3),a3		; [cyc] unlikely edge
 	bra	.off
-.cyc_stub227:
+.cyc_stub228:
 	lea	228(a3),a3		; [cyc] unlikely edge
 	bra	st2_frame
 .off:
@@ -1894,7 +1928,7 @@ st4:
 ; state 5: falling debris
 ; ---------------------------------------------------------------------------
 st5:
-	lea	404(a3),a3		; [cyc] block
+	lea	394(a3),a3		; [cyc] block
 	move.w	O_AX(a0),d4
 	add.w	O_VX(a0),d4
 	move.w	d4,d0
@@ -1929,7 +1963,7 @@ st5:
 	move.w	d4,O_X(a0)
 	cmp.w	O_FLAG(a0),d4
 	bgt	.alive
-	lea	-120(a3),a3		; [cyc] fall-through
+	lea	-110(a3),a3		; [cyc] fall-through
 	subq.w	#1,SYS+$02(a5)	; $500
 	subq.w	#1,SYS+$10(a5)
 	clr.w	(a0)
@@ -1949,7 +1983,12 @@ st5:
 	andi.w	#$3ff,d0
 	ori.w	#$8000,d0
 	move.w	d0,O_SPRY(a0)
-	bra	anim_down
+	subq.w	#1,O_ACNT(a0)	; anim_down, inline
+	bcs	.cyc_stub298	; @unlikely
+	rts
+.cyc_stub298:
+	lea	234(a3),a3		; [cyc] unlikely edge
+	bra	anim_down_f
 
 ; ---------------------------------------------------------------------------
 ; states 6 / 7: items moving with the background

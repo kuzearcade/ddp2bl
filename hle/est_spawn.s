@@ -275,6 +275,15 @@ sp_vanishtype:
 
 ; id 7: every scripted bullet becomes falling debris, appearing ones vanish ($1E34)
 sp_todebris:
+	; Converts every state-2 bullet (126 at a boss's death): the per-object work is kept
+	; in registers and adjacent fields are written as longs.
+	;   d7 = state 5 : type (O_STATE, O_TYPE)     a6 = base : limit (O_ABASE, O_FLAG)
+	;   d6 = counter S_CNT82                      d3 = current frame (S_CNT84 & $f)
+	;   a1 = animation entry of the current frame, T_ANIM + 8*(base + frame) as
+	;        copy_anim_1800 computes it, and d2 = its first word (|$1800) : base.
+	; The entry only changes with the frame, every 4th object. The counters are stored back
+	; after the loop; nothing reads them in between.
+	moveq	#0,d7
 	move.w	2(a2),d7		; type
 	moveq	#0,d2
 	move.w	d7,d2
@@ -285,12 +294,19 @@ sp_todebris:
 	move.w	d7,d3
 	add.w	d3,d3
 	lea	T_19C8,a1
-	move.w	(a1,d3.w),TMP(a5)	; limit
 	move.w	d7,d2
 	lsl.w	#5,d2
 	addi.w	#$24,d2			; animation base
+	move.w	d2,d0
+	swap	d0
+	move.w	(a1,d3.w),d0		; limit
+	movea.l	d0,a6
+	ori.l	#$50000,d7
+	moveq	#0,d3
 	move.w	SYS+S_CNT84(a5),d3
 	andi.w	#$f,d3			; current frame
+	bsr	todebris_entry
+	move.w	SYS+S_CNT82(a5),d6
 	lea	POOL(a5),a0
 	moveq	#NOBJ-1,d5
 .l:	move.w	(a0),d0
@@ -300,38 +316,56 @@ sp_todebris:
 	bne.s	.n
 	clr.w	(a0)
 	bra.s	.n
-.conv:	move.w	#5,(a0)
-	move.w	d7,O_TYPE(a0)
+.conv:	move.l	d7,(a0)			; state 5, type
+	move.l	a6,O_ABASE(a0)		; animation base, limit
 	move.w	d3,O_AFRAME(a0)
-	move.w	d2,O_ABASE(a0)
-	move.w	SYS+S_CNT82(a5),d1
-	addq.w	#1,d1
-	move.w	d1,SYS+S_CNT82(a5)
+	addq.w	#1,d6
+	move.w	d6,d1
 	andi.w	#3,d1
 	bne.s	.anim
 	move.w	SYS+S_CNT84(a5),d3
 	addq.w	#1,d3
 	move.w	d3,SYS+S_CNT84(a5)
 	andi.w	#$f,d3
+	bsr	todebris_entry
 	bra.s	.set
-.anim:	movem.l	d1/d2,-(sp)
-	move.w	d3,d0
-	bsr	copy_anim_1800		; uses O_ABASE (= d2) + frame d0
-	movem.l	(sp)+,d1/d2
+.anim:	swap	d2			; copy_anim_1800 with the current frame
+	move.w	d2,O_SPR(a0)
+	swap	d2
+	move.w	2(a1),O_SPR+2(a0)
+	move.l	4(a1),O_SPR+4(a0)
 .set:	move.w	d1,O_ACNT(a0)
+	move.w	O_VY(a0),d0		; VX : VY
+	andi.w	#$f,d0
+	subq.w	#7,d0
+	swap	d0
 	move.w	d1,d0
 	lsl.w	#6,d0
 	subi.w	#$40,d0
-	move.w	d0,O_VX(a0)
-	move.w	O_VY(a0),d0
-	andi.w	#$f,d0
-	subq.w	#7,d0
-	move.w	d0,O_VY(a0)
+	swap	d0
+	move.l	d0,O_VX(a0)
 	clr.l	O_AX(a0)		; AX and AY
 	move.l	d4,O_OX(a0)
-	move.w	TMP(a5),O_FLAG(a0)
 .n:	lea	OBJ_SIZE(a0),a0
 	dbra	d5,.l
+	move.w	d6,SYS+S_CNT82(a5)
+	rts
+
+; todebris_entry: a1 = T_ANIM + 8*(d2.w + d3), 32-bit like copy_anim_1800 (d3: upper word
+; 0); high word of d2 = the entry's first word with the copy_anim_1800 mask
+todebris_entry:
+	moveq	#0,d0
+	move.w	d2,d0
+	add.l	d3,d0
+	lsl.l	#3,d0
+	lea	T_ANIM,a1
+	adda.l	d0,a1
+	move.w	(a1),d0
+	andi.w	#$e0ff,d0
+	ori.w	#$1800,d0
+	swap	d2
+	move.w	d0,d2
+	swap	d2
 	rts
 
 ; debris4_init: a0 = slot, d7 = type, d4 = x:y, d2 = animation base
