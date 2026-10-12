@@ -213,6 +213,7 @@ need `unicorn` or `numpy`.
 | Real ARM firmware vs model vs 68000, random requests | `harness/fuzz.py DIR` |
 | Timing margin of every frame | `harness/hle_stream_test.py DIR --jobs-out DIR/jobs.txt`, then `tools/margin.py DIR` |
 | Full game, protected vs converted, frame by frame | `sh harness/fullgame.sh 1p\|2p\|nc1p\|nc2p work/runs/NAME` |
+| Three 60,000-frame sessions (one player, two players, no cheats) | `sh harness/longruns.sh work/runs/NAME` (`FRAMES=n` for a shorter run) |
 | Sound packets and output of a full game | `AUDIO=1 sh harness/fullgame.sh ...`, then `tools/audiocheck.py work/runs/NAME_ref work/runs/NAME_bl` |
 
 `fullgame.sh` replays the recorded inputs in `harness/inputs/` on both sets with
@@ -236,13 +237,28 @@ MAME ignores SIGTERM/SIGINT under the harness, so stop it with `kill -9 <pid>`. 
 
   `hle/build/` holds the committed binary.
 * `tools/`: the builder (`ddp2bl_build.py`) and:
-  * patch and include generators;
-  * cycle accounting;
-  * capture reader and Unicorn ARM reference;
-  * timing, margin and audio analysis;
-  * MAME Lua scripts.
+  * patch and include generators (`gen_patches.py`, `gen_target_inc.py`, `mulcost.py`);
+  * cycle accounting (`cycacc.py`);
+  * capture reader and Unicorn ARM reference (`capture.py`, `armref.py`,
+    `validate_armref.py`);
+  * timing analysis:
+    * `timing.py`: the initial feasibility check (ARM work vs the 68000's idle time);
+    * `calib.py`: per-command timing records for the ARM wait-time model;
+    * `margin.py`: timing margin of every frame;
+    * `probe_check.py`: checks the cycle probe;
+  * `audiocheck.py`: sound comparison of two runs;
+  * `dump2png.py`: renders the pixels of a harness state dump;
+  * MAME Lua scripts (`tools/lua/`):
+    * `slack.lua`: vblank/idle log;
+    * `sndmon.lua`: sound command monitor;
+    * `multi.lua`: runs several of these in one session;
+    * `irqprobe.lua`: interrupt-timing measurements;
+    * `stackdepth.lua`: deepest stack write;
+    * `snap.lua`: periodic screenshots for visual checks;
+  * Ghidra setup script (`ghidra/DDP2Setup.java`).
 * `oracle/`: C model of the ARM firmware, verified against the real firmware.
-* `harness/`: MAME harness (`run.py` and Lua), Musashi bench, tests, recorded inputs.
+* `harness/`: MAME harness (`run.py` and Lua), Musashi bench, tests, and the recorded
+  inputs for the full games (`fullgame.sh`) and the 60,000-frame runs (`longruns.sh`).
 * `mame/`: MAME patch (`ddp2bl` driver and analysis instrumentation).
 * `mister/`: MiSTer MRA.
 * `docs/`:
