@@ -218,3 +218,22 @@ MAME ignores SIGTERM/SIGINT under the harness, so stop it with `kill -9 <pid>`. 
   * `timing.md`: cycle model;
   * `hardware.md`: cartridge build;
   * `verification.md`: results.
+
+## Legal
+
+This repository contains no original game code or data. It includes no ROM images,
+program bytes, ARM firmware, disassembly or decompiled code of the game or of the
+IGS027A, and no game graphics or sound. Everything here is original work:
+* the 68000 replacement code;
+* the tools;
+* the documentation, which describes the hardware's behaviour by address and function.
+
+The original program is checked only by its hash. The builder needs a dump you supply
+(`ddp2.zip`) and produces the converted set from it locally.
+
+The project is intended strictly for repairing original *DoDonPachi II* cartridges
+whose IGS027A has failed, so that the owner of the original board can keep using it.
+It is not intended for making copies of the game or for any other use.
+
+*DoDonPachi* and the game's assets belong to their respective rights holders. This
+project is not affiliated with or endorsed by Cave or IGS.
