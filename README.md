@@ -20,8 +20,8 @@ python3 tools/ddp2bl_build.py ddp2.zip -o ddp2bl.zip
 ```
 
 `ddp2.zip` must be the MAME set for *DoDonPachi II - Bee Storm (World, ver. 102)*. Every
-input file is checked against known hashes, every patch checks the bytes it replaces,
-and the tool prints the CRC32/SHA1 of each output file.
+input file is checked against known hashes (the program by SHA1, before it is patched),
+and the tool prints the region and the CRC32/SHA1 of each output file.
 
 To also write the EPROM images (all 27C322) for a cartridge:
 
@@ -31,6 +31,23 @@ python3 tools/ddp2bl_build.py ddp2.zip -o ddp2bl.zip --images ddp2bl_images/
 
 `docs/hardware.md` describes the images and how they relate to the original
 cartridge.
+
+### Region
+
+The region is the one the IGS027A reports, so by default the build keeps the source
+set's: World. To build another region, pass `--region` with `china`, `taiwan`, `japan`,
+`korea`, `hongkong` or `world`:
+
+```
+python3 tools/ddp2bl_build.py ddp2.zip -o ddp2bl.zip --region japan
+```
+
+MAME's regional `ddp2` sets pair this same v102 program with another region's IGS027A,
+and the game takes its region from the code that chip reports. Only that code changes,
+one byte of the program. Checked for Japan in MAME: the game shows the Japan warning and
+the Cave licence screen. The other regions' ARM ROMs weren't available to compare against. Its checksums then differ from the
+World build listed in the MAME driver and the MiSTer MRA, so MAME warns about a wrong
+checksum (the game still runs).
 
 ### MiSTer
 

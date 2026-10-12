@@ -11,6 +11,7 @@ python3 tools/ddp2bl_build.py ddp2.zip -o ddp2bl.zip --images ddp2bl_images/
 
 `ddp2.zip` must be the MAME set for *DoDonPachi II - Bee Storm (World, ver. 102)*; every
 file is checked against known hashes. The tool prints the CRC32/SHA1 of each output.
+The region defaults to World; `--region` selects another (see the README).
 
 ## The images (27C322 size, 4MB each)
 

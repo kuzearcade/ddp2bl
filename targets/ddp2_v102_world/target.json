@@ -50,6 +50,7 @@
   },
   "arm_external_decrypted_sha1": "2ba54737bab16d84d08b25e40e2ea7078a2a4b22",
   "region_word_offset": "0x2880",
+  "regions": {"china": 0, "taiwan": 1, "japan": 2, "korea": 3, "hongkong": 4, "world": 5},
   "reloc_base": "0x818000",
   "reloc_size": "0x3400",
   "hlev_base": "0x81B400",

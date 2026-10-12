@@ -2,6 +2,7 @@
 """Build ddp2bl.zip (ASIC-less DoDonPachi II) from a MAME ddp2.zip.
 
     python3 ddp2bl_build.py ddp2.zip [-o ddp2bl.zip] [--target ddp2_v102_world] [--images DIR]
+                            [--region china|taiwan|japan|korea|hongkong|world]
 
 Standard library only. Every input file is checked against known hashes (the program by
 SHA1, before it is patched), and the output hashes are printed.
@@ -87,6 +88,8 @@ def main():
     ap.add_argument("--target", default="ddp2_v102_world")
     ap.add_argument("--images", help="also write the EPROM images to this directory")
     ap.add_argument("--hle", help="68000 replacement binary (default: hle/build/<target>.bin)")
+    ap.add_argument("--region", help="region the game reports (the IGS027A's region word); default: "
+                    "the one in the source set's ARM ROM (World for ddp2.zip)")
     a = ap.parse_args()
 
     tdir = os.path.join(ROOT, "targets", a.target)
@@ -100,6 +103,10 @@ def main():
         die("target.json: the program needs a sha1 (patches carry no original bytes to check)")
     src = read_source(a.source, cfg)
     internal = src["arm_internal"]
+    regions = cfg["regions"]
+    names = {v: k for k, v in regions.items()}
+    if a.region is not None and a.region.lower() not in regions:
+        die("unknown region %s (one of: %s)" % (a.region, ", ".join(regions)))
     ext = decrypt_external(src["arm_external"], internal)
     if sha1(ext) != cfg["arm_external_decrypted_sha1"]:
         die("external ARM ROM decryption check failed")
@@ -141,6 +148,11 @@ def main():
         if "arm_word" in p:
             # region word, from the ARM internal ROM: halfwords swapped (68k long = low:high)
             w = struct.unpack_from("<I", internal, int(p["arm_word"], 16))[0]
+            if w >> 16 not in names:
+                die("unexpected region word %08x in the ARM ROM" % w)
+            if a.region is not None:
+                w = (w & 0xffff) | (regions[a.region.lower()] << 16)   # the 68k reads the high half
+            region = "%s (%02x)" % (names[w >> 16], w >> 16)
             new = struct.pack(">I", ((w & 0xffff) << 16) | (w >> 16))
             if any(prog[o:o + 4]):
                 die("region word site %06x is not the assembled placeholder" % p["addr"])
@@ -170,7 +182,7 @@ def main():
         os.makedirs(a.images, exist_ok=True)
         for name, data in out:
             open(os.path.join(a.images, name), "wb").write(data)
-    print("wrote %s (%d patches, %d bytes of 68000 code)" % (a.output, len(patches), len(hle)))
+    print("wrote %s (%d patches, %d bytes of 68000 code), region %s" % (a.output, len(patches), len(hle), region))
     for name, data in out:
         print("  %-20s %7x CRC(%s) SHA1(%s)" % (name, len(data), crc(data), sha1(data)))
 
