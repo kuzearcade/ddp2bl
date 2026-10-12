@@ -49,6 +49,38 @@ the Cave licence screen. The other regions' ARM ROMs weren't available to compar
 World build listed in the MAME driver and the MiSTer MRA, so MAME warns about a wrong
 checksum (the game still runs).
 
+### Expected checksums
+
+With the default region (World), every file in `ddp2bl.zip`, and every image `--images`
+writes, must match these:
+
+| File | Size | CRC32 | SHA1 |
+|---|---|---|---|
+| `ddp2bl_p1.27c322` | 4 MB | `ce18c4a3` | `26f5c0bec8ac294f98297055a919c6b9b93778bf` |
+| `ddp2bl_t1.27c322` | 4 MB | `e6637091` | `c8f2f8b34a29df6ed93a27a93057fe0c35dc86f5` |
+| `ddp2bl_t2.27c322` | 4 MB | `0024c0e4` | `f521dfa54f5ff2142638adfbbb1b3b516296a3a8` |
+| `ddp2bl_a1.27c322` | 4 MB | `ad79e511` | `e0d62154f387f1e62344b1fdf1d096b86f371ffc` |
+| `ddp2bl_a2.27c322` | 4 MB | `c4022f02` | `65b253a3ba480b2ee8c729f734d3a1428fe3d45b` |
+| `ddp2bl_a3.27c322` | 4 MB | `8ce5b496` | `833c4ed2014fa6b4593bfc98d5743e624ced8ea1` |
+| `ddp2bl_a4.27c322` | 4 MB | `fd10cef9` | `30ca710acc163fbf8e12aef62bc985a10981f118` |
+| `ddp2bl_b1.27c322` | 4 MB | `1b8548ad` | `1e1dd1fe703f0a6ffda45dfe0dde36b895d7f746` |
+| `ddp2bl_b2.27c322` | 4 MB | `d05a4bb2` | `f05b3f704066d6169cbf3f23fc891d5b25679419` |
+| `ddp2bl_m1.27c322` | 4 MB | `82d4015d` | `d4cdc1aec1c97cf23ff7a20ccaad822962e66ffa` |
+
+With `--region`, only `ddp2bl_p1.27c322` changes:
+
+| Region | CRC32 | SHA1 |
+|---|---|---|
+| `china` | `2f908621` | `a0dcd25aa41b713046961eaee54718508ebcf163` |
+| `taiwan` | `ac686e34` | `d8fe8085fb2b0dd099b7e416a5dab659aaaebdc8` |
+| `japan` | `f310504a` | `8572a536e0b936a7c4e414a4a58e5511e4acb93f` |
+| `korea` | `70e8b85f` | `5bbe1aa7fe78b5f269d7a7ee0bc4b5d287f21e7c` |
+| `hongkong` | `4de02cb6` | `2562badded93ec45323549ff5feb2e805c64eddc` |
+| `world` (default) | `ce18c4a3` | `26f5c0bec8ac294f98297055a919c6b9b93778bf` |
+
+The builder prints these for each build. Compare the files, not the zip itself: the
+zip's own bytes depend on the compression library and can differ between systems.
+
 ### MiSTer
 
 Copy `ddp2bl.zip` next to `pgm.zip` (usually `/media/fat/games/mame/`) and
