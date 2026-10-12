@@ -1,0 +1,549 @@
+diff --git a/src/devices/cpu/arm7/arm7.cpp b/src/devices/cpu/arm7/arm7.cpp
+index f8b8767e354..0791134f90b 100644
+--- a/src/devices/cpu/arm7/arm7.cpp
++++ b/src/devices/cpu/arm7/arm7.cpp
+@@ -1570,6 +1570,9 @@ void arm7_cpu_device::execute_run()
+ 	{
+ 		uint32_t pc = GET_PC;
+ 
++		if (m_insn_hook) // ddp2bl analysis instrumentation (opt-in, unset in normal use)
++			m_insn_hook(pc, T_IS_SET(GET_CPSR));
++
+ #if PRINT_HAPYFSH2
+ 		if (pc == 0xC0047374)
+ 		{
+diff --git a/src/devices/cpu/arm7/arm7.h b/src/devices/cpu/arm7/arm7.h
+index 3a03451777b..633971057dd 100644
+--- a/src/devices/cpu/arm7/arm7.h
++++ b/src/devices/cpu/arm7/arm7.h
+@@ -18,6 +18,8 @@
+ 
+ #pragma once
+ 
++#include <functional>
++
+ #include "arm7dasm.h"
+ 
+ /****************************************************************************************************
+@@ -27,6 +29,9 @@
+ class arm7_cpu_device : public cpu_device, public arm7_disassembler::config
+ {
+ public:
++	// ddp2bl analysis instrumentation: called before each instruction when set
++	std::function<void (uint32_t pc, bool thumb)> m_insn_hook;
++
+ 	enum
+ 	{
+ 		ARM7_IRQ_LINE=0, ARM7_FIRQ_LINE,
+diff --git a/src/frontend/mame/luaengine_mem.cpp b/src/frontend/mame/luaengine_mem.cpp
+index bfac87d6d9f..00eb90f96ce 100644
+--- a/src/frontend/mame/luaengine_mem.cpp
++++ b/src/frontend/mame/luaengine_mem.cpp
+@@ -794,6 +794,16 @@ void lua_engine::initialize_memory(sol::table &emu)
+ 	share_type.set_function("write_u32", &share_write<u32>);
+ 	share_type.set_function("write_i64", &share_write<s64>);
+ 	share_type.set_function("write_u64", &share_write<u64>);
++	// raw host-order bytes of a share, without going through any address space handlers
++	// (ddp2bl harness: side-effect free state capture)
++	share_type.set_function("read_raw",
++			[] (memory_share &sh, sol::this_state s, offs_t start, offs_t count)
++			{
++				const offs_t size = offs_t(sh.bytes());
++				if (start > size) start = size;
++				if (count > size - start) count = size - start;
++				return sol::make_object(s, std::string_view(reinterpret_cast<const char *>(sh.ptr()) + start, count));
++			});
+ 	share_type["tag"] = sol::property(&memory_share::name);
+ 	share_type["size"] = sol::property(&memory_share::bytes);
+ 	share_type["length"] = sol::property([] (memory_share &s) { return s.bytes() / s.bytewidth(); });
+diff --git a/src/mame/igs/ddp2_capture.h b/src/mame/igs/ddp2_capture.h
+new file mode 100644
+index 00000000000..daa42439c68
+--- /dev/null
++++ b/src/mame/igs/ddp2_capture.h
+@@ -0,0 +1,174 @@
++// license:BSD-3-Clause
++// copyright-holders:ddp2bl project
++/***********************************************************************
++ Opt-in analysis instrumentation for the IGS027A type 2 protection
++ (used by the ddp2bl ASIC-removal project). Inactive unless the
++ DDP2_CAPTURE environment variable names an output directory.
++
++ capture.bin is a stream of records:
++   u8  type   (1 = 68k latch write, 2 = ARM latch write, 3 = 68k latch read)
++   u32 seq, u32 frame, u64 68k cycles, u64 ARM cycles, u32 value, u32 aux
++   then, for types 1 and 2, sparse diffs of each tracked region against the
++   previous record: repeated (u32 offset, u32 length, bytes...), ended by length 0.
++ Record types 4 and 5 carry no diffs:
++   4 = ARM write to the EST job busy flag (0x18000080): value = data, aux = mem_mask
++   5 = 68k idle period (game waiting for vblank): frame = frame at entry, 68k cycles field =
++       entry cycle, ARM cycles field = cycle when the next busy period was detected,
++       value = idle-loop reads, aux = cycles from entry to the last idle read
++ Regions: 0 = shared RAM (64K, ARM view, little endian dwords),
++          1 = ARM RAM 0x18000000 (64K), 2 = ARM IRAM 0x10000000 (1K).
++
++ coverage.bin (written at exit): for each command id seen
++   u32 cmd, u32 nbytes, bitmap of executed halfwords in 0x00000000-0x00003fff,
++   then 0x08000000-0x0801ffff (bit set = instruction started there),
++   then u32 thumb-bitmap length + bitmap (bit set = executed in Thumb state),
++   then read bitmaps (one bit per byte) for regions 0..2.
++***********************************************************************/
++#ifndef MAME_IGS_DDP2_CAPTURE_H
++#define MAME_IGS_DDP2_CAPTURE_H
++
++#pragma once
++
++#include <cstdio>
++#include <cstdlib>
++#include <cstring>
++#include <map>
++#include <string>
++#include <vector>
++
++class ddp2_capture
++{
++public:
++	static constexpr u32 INT_SIZE = 0x4000;
++	static constexpr u32 EXT_BASE = 0x08000000;
++	static constexpr u32 EXT_SIZE = 0x20000;
++
++	struct region { const u8 *mem; u32 size; std::vector<u8> shadow; };
++	struct percmd
++	{
++		std::vector<u8> exec, thumb;            // over (INT_SIZE + EXT_SIZE) / 2 halfwords
++		std::vector<u8> reads[3];
++		u64 insns = 0, calls = 0;
++	};
++
++	ddp2_capture(const std::string &dir) : m_dir(dir)
++	{
++		m_out = std::fopen((dir + "/capture.bin").c_str(), "wb");
++	}
++
++	~ddp2_capture()
++	{
++		if (m_out)
++			std::fclose(m_out);
++		write_coverage();
++	}
++
++	// 68k main RAM access footprint (one bit per byte), written to mainram_rw.bin at exit
++	void main_access(bool write, u32 off, u16 mask)
++	{
++		std::vector<u8> &b = write ? m_main_w : m_main_r;
++		off &= 0x1fffe; // main RAM is mirrored; taps may report mirrored addresses
++		if (mask & 0xff00) b[off >> 3] |= 1 << (off & 7);
++		if (mask & 0x00ff) b[(off + 1) >> 3] |= 1 << ((off + 1) & 7);
++	}
++
++	void add_region(const void *mem, u32 size) { m_regions.push_back(region{ static_cast<const u8 *>(mem), size, std::vector<u8>(size, 0) }); }
++
++	void set_cmd(u32 cmd) { m_cur = &get(cmd); m_cur->calls++; }
++
++	void insn(u32 pc, bool thumb)
++	{
++		percmd &c = *m_cur;
++		u32 idx;
++		if (pc < INT_SIZE) idx = pc >> 1;
++		else if (pc - EXT_BASE < EXT_SIZE) idx = (INT_SIZE + (pc - EXT_BASE)) >> 1;
++		else return;
++		c.exec[idx >> 3] |= 1 << (idx & 7);
++		if (thumb) c.thumb[idx >> 3] |= 1 << (idx & 7);
++		c.insns++;
++	}
++
++	void read(int reg, u32 off, u32 mask)
++	{
++		std::vector<u8> &b = m_cur->reads[reg];
++		const u32 size = u32(b.size()) * 8;
++		off &= ~3U;
++		for (int i = 0; i < 4; i++)
++			if ((mask & (0xffU << (i * 8))) && off + i < size)
++				b[(off + i) >> 3] |= 1 << ((off + i) & 7);
++	}
++
++	void record(u8 type, u32 frame, u64 cyc68k, u64 cycarm, u32 value, u32 aux, bool diffs)
++	{
++		if (!m_out)
++			return;
++		put(&type, 1); put32(m_seq++); put32(frame); put64(cyc68k); put64(cycarm); put32(value); put32(aux);
++		if (!diffs)
++			return;
++		for (region &r : m_regions)
++		{
++			u32 i = 0;
++			while (i < r.size)
++			{
++				if (r.mem[i] == r.shadow[i]) { i++; continue; }
++				u32 start = i;
++				// merge runs separated by fewer than 8 equal bytes
++				u32 same = 0;
++				while (i < r.size && same < 8) { same = (r.mem[i] == r.shadow[i]) ? same + 1 : 0; i++; }
++				u32 len = i - start - same;
++				put32(start); put32(len); put(r.mem + start, len);
++				std::memcpy(&r.shadow[start], r.mem + start, len);
++			}
++			put32(0); put32(0);
++		}
++	}
++
++private:
++	percmd &get(u32 cmd)
++	{
++		auto it = m_cmds.find(cmd);
++		if (it != m_cmds.end())
++			return it->second;
++		percmd &c = m_cmds[cmd];
++		const u32 n = (INT_SIZE + EXT_SIZE) / 2 / 8;
++		c.exec.assign(n, 0); c.thumb.assign(n, 0);
++		for (int i = 0; i < 3; i++) c.reads[i].assign(i == 2 ? 0x400 / 8 : 0x10000 / 8, 0);
++		return c;
++	}
++
++	void write_coverage()
++	{
++		if (FILE *m = std::fopen((m_dir + "/mainram_rw.bin").c_str(), "wb"))
++		{
++			std::fwrite(m_main_r.data(), 1, m_main_r.size(), m);
++			std::fwrite(m_main_w.data(), 1, m_main_w.size(), m);
++			std::fclose(m);
++		}
++		FILE *f = std::fopen((m_dir + "/coverage.bin").c_str(), "wb");
++		if (!f)
++			return;
++		for (auto &[cmd, c] : m_cmds)
++		{
++			u32 hdr[4] = { cmd, u32(c.exec.size()), u32(c.calls), u32(c.insns) };
++			std::fwrite(hdr, 4, 4, f);
++			std::fwrite(c.exec.data(), 1, c.exec.size(), f);
++			std::fwrite(c.thumb.data(), 1, c.thumb.size(), f);
++			for (auto &r : c.reads) { u32 n = r.size(); std::fwrite(&n, 4, 1, f); std::fwrite(r.data(), 1, n, f); }
++		}
++		std::fclose(f);
++	}
++
++	void put(const void *p, size_t n) { std::fwrite(p, 1, n, m_out); }
++	void put32(u32 v) { put(&v, 4); }
++	void put64(u64 v) { put(&v, 8); }
++
++	std::string m_dir;
++	FILE *m_out = nullptr;
++	u32 m_seq = 0;
++	std::vector<region> m_regions;
++	std::map<u32, percmd> m_cmds;
++	std::vector<u8> m_main_r = std::vector<u8>(0x20000 / 8, 0), m_main_w = std::vector<u8>(0x20000 / 8, 0);
++	percmd *m_cur = &get(0xffffffff); // boot / idle code before the first command
++};
++
++#endif // MAME_IGS_DDP2_CAPTURE_H
+diff --git a/src/mame/igs/pgm.cpp b/src/mame/igs/pgm.cpp
+index bef86aaf47f..963732ff251 100644
+--- a/src/mame/igs/pgm.cpp
++++ b/src/mame/igs/pgm.cpp
+@@ -479,6 +479,16 @@ u16 pgm_state::sprites_r(offs_t offset)
+ void pgm_state::machine_start()
+ {
+ 	save_item(NAME(m_z80_sync));
++
++	// ddp2bl verification: per-cycle CPU interleave, so comparisons between machines with and
++	// without the protection CPU are not affected by scheduler granularity (opt-in)
++	if (std::getenv("DDP2_PERFECT"))
++		machine().scheduler().add_quantum(attotime::from_hz(20'000'000), attotime::never);
++
++	// ddp2bl verification: the Z80 runs from its own crystal on the real board; detune it by
++	// DDP2_Z80_PPM parts per million to see how the game depends on the 68000/Z80 phase
++	if (const char *ppm = std::getenv("DDP2_Z80_PPM"))
++		m_soundcpu->set_clock_scale(1.0 + std::atof(ppm) * 1e-6);
+ }
+ 
+ void pgm_state::screen_vblank(int state)
+@@ -3357,6 +3367,40 @@ ROM_START( ddp2 )
+ 	DDP2_COMMON_ROMS
+ ROM_END
+ 
++/*
++  DoDonPachi II - Bee Storm (World, ver. 102), ASIC-less conversion (ddp2bl project)
++
++  Program ROM patched so that every IGS027A command is answered by 68000 code and the
++  ARM shared RAM is relocated into main RAM, allowing the game to run on a cartridge
++  whose IGS027A is dead or missing. The program sits in the first 2MB of P1, the
++  rest is empty. Graphics/sound ROMs are the ddp2 mask ROMs split
++  into 27C322-sized images.
++*/
++ROM_START( ddp2bl )
++	ROM_REGION( 0x600000, "maincpu", 0 ) /* 68000 Code */
++	PGM_68K_BIOS
++	ROM_LOAD16_WORD_SWAP( "ddp2bl_p1.27c322", 0x100000, 0x400000, CRC(ce18c4a3) SHA1(26f5c0bec8ac294f98297055a919c6b9b93778bf) ) // regenerated by tools/ddp2bl_build.py
++
++	ROM_REGION( 0xa00000, "igs023", 0 ) /* 8x8 Text Tiles + 32x32 BG Tiles */
++	PGM_VIDEO_BIOS
++	ROM_LOAD( "ddp2bl_t1.27c322", 0x180000, 0x400000, CRC(e6637091) SHA1(c8f2f8b34a29df6ed93a27a93057fe0c35dc86f5) )
++	ROM_LOAD( "ddp2bl_t2.27c322", 0x580000, 0x400000, CRC(0024c0e4) SHA1(f521dfa54f5ff2142638adfbbb1b3b516296a3a8) )
++
++	ROM_REGION16_LE( 0x1000000, "igs023:sprcol", 0 ) /* Sprite Colour Data */
++	ROM_LOAD( "ddp2bl_a1.27c322", 0x0000000, 0x400000, CRC(ad79e511) SHA1(e0d62154f387f1e62344b1fdf1d096b86f371ffc) )
++	ROM_LOAD( "ddp2bl_a2.27c322", 0x0400000, 0x400000, CRC(c4022f02) SHA1(65b253a3ba480b2ee8c729f734d3a1428fe3d45b) )
++	ROM_LOAD( "ddp2bl_a3.27c322", 0x0800000, 0x400000, CRC(8ce5b496) SHA1(833c4ed2014fa6b4593bfc98d5743e624ced8ea1) )
++	ROM_LOAD( "ddp2bl_a4.27c322", 0x0c00000, 0x400000, CRC(fd10cef9) SHA1(30ca710acc163fbf8e12aef62bc985a10981f118) )
++
++	ROM_REGION16_LE( 0x0800000, "igs023:sprmask", 0 ) /* Sprite Masks + Colour Indexes */
++	ROM_LOAD( "ddp2bl_b1.27c322", 0x0000000, 0x400000, CRC(1b8548ad) SHA1(1e1dd1fe703f0a6ffda45dfe0dde36b895d7f746) )
++	ROM_LOAD( "ddp2bl_b2.27c322", 0x0400000, 0x400000, CRC(d05a4bb2) SHA1(f05b3f704066d6169cbf3f23fc891d5b25679419) )
++
++	ROM_REGION( 0x800000, "ics", ROMREGION_ERASE00 ) /* Samples - (8 bit mono 11025Hz) - */
++	PGM_AUDIO_BIOS
++	ROM_LOAD( "ddp2bl_m1.27c322", 0x400000, 0x400000, CRC(82d4015d) SHA1(d4cdc1aec1c97cf23ff7a20ccaad822962e66ffa) )
++ROM_END
++
+ ROM_START( ddp2101 )
+ 	DDP2_PROGRAM_101
+ 	DDP2_ASIC027_WORLD
+@@ -5537,6 +5581,40 @@ void pgm_state::pgm_basic_init(bool set_bank)
+ 	if (set_bank) membank("bank1")->set_base(&ROM[0x100000]);
+ }
+ 
++void pgm_state::init_ddp2bl()
++{
++	pgm_basic_init();
++
++	// ddp2bl verification probe (opt-in): the 68000 replacement writes two longs at
++	// DDP2BL_PROBE_ADDR around its idle-time job; log the CPU cycle count at each write
++	// together with the value written (its own cycle accounting), to DDP2BL_PROBE.
++	if (const char *probe = std::getenv("DDP2BL_PROBE"))
++	{
++		const offs_t addr = std::strtoul(std::getenv("DDP2BL_PROBE_ADDR"), nullptr, 16);
++		static FILE *f = std::fopen(probe, "w");
++		m_maincpu->space(AS_PROGRAM).install_write_tap(addr, addr + 15, "ddp2bl_probe",
++				[this, addr] (offs_t offset, u16 &data, u16 mem_mask)
++				{
++					if (f) { std::fprintf(f, "%u %llu %04x\n", unsigned(offset - addr), (unsigned long long)m_maincpu->total_cycles(), data); std::fflush(f); }
++				});
++	}
++
++	// no IGS027A on this cartridge: any access to the old ARM shared RAM / latch window is a conversion bug
++	m_maincpu->space(AS_PROGRAM).install_readwrite_handler(0xd00000, 0xd1ffff,
++			read16s_delegate(*this, [this] (offs_t offset, u16 mem_mask) -> u16 {
++				if (!machine().side_effects_disabled())
++				{
++					logerror("ddp2bl: stray read %06x (%04x) at %06x\n", 0xd00000 + offset * 2, mem_mask, m_maincpu->pc());
++					if (std::getenv("DDP2BL_TRAP")) fatalerror("ddp2bl: stray read %06x at %06x\n", 0xd00000 + offset * 2, m_maincpu->pc());
++				}
++				return 0xffff;
++			}, "ddp2bl_trap_r"),
++			write16s_delegate(*this, [this] (offs_t offset, u16 data, u16 mem_mask) {
++				logerror("ddp2bl: stray write %06x = %04x (%04x) at %06x\n", 0xd00000 + offset * 2, data, mem_mask, m_maincpu->pc());
++				if (std::getenv("DDP2BL_TRAP")) fatalerror("ddp2bl: stray write %06x at %06x\n", 0xd00000 + offset * 2, m_maincpu->pc());
++			}, "ddp2bl_trap_w"));
++}
++
+ void pgm_state::init_pgm()
+ {
+ 	pgm_basic_init();
+@@ -5656,6 +5734,7 @@ GAME( 2001, ddp2100t,     ddp2,      pgm_arm_type2,          pgm,       pgm_arm_
+ GAME( 2001, ddp2c,        ddp2,      pgm_arm_type2,          pgm,       pgm_arm_type2_state, init_ddp2,       ROT270, "IGS", "DoDonPachi - Feng Bao (China, ver. 102)", MACHINE_IMPERFECT_SOUND | MACHINE_SUPPORTS_SAVE )
+ GAME( 2001, ddp2101c,     ddp2,      pgm_arm_type2,          pgm,       pgm_arm_type2_state, init_ddp2,       ROT270, "IGS", "DoDonPachi - Feng Bao (China, ver. 101)", MACHINE_IMPERFECT_SOUND | MACHINE_SUPPORTS_SAVE )
+ GAME( 2001, ddp2100c,     ddp2,      pgm_arm_type2,          pgm,       pgm_arm_type2_state, init_ddp2,       ROT270, "IGS", "DoDonPachi - Feng Bao (China, ver. 100)", MACHINE_IMPERFECT_SOUND | MACHINE_SUPPORTS_SAVE )
++GAME( 2001, ddp2bl,       ddp2,      pgm,                    pgm,       pgm_state,           init_ddp2bl,     ROT270, "hack",  "DoDonPachi II - Bee Storm (World, ver. 102, ASIC-less conversion)", MACHINE_IMPERFECT_SOUND | MACHINE_SUPPORTS_SAVE )
+ 
+ 
+ // japan region only? service mode calls it Dragon World 2001 so I'm leaving that title in the description
+diff --git a/src/mame/igs/pgm.h b/src/mame/igs/pgm.h
+index e603af5c260..7c8b434cfb9 100644
+--- a/src/mame/igs/pgm.h
++++ b/src/mame/igs/pgm.h
+@@ -44,6 +44,7 @@ public:
+ 	}
+ 
+ 	void init_pgm();
++	void init_ddp2bl();
+ 
+ 	void pgm_basic_init(bool set_bank = true);
+ 	void pgm(machine_config &config);
+diff --git a/src/mame/igs/pgmprot_igs027a_type2.cpp b/src/mame/igs/pgmprot_igs027a_type2.cpp
+index fcfd105a917..93ef3db36a0 100644
+--- a/src/mame/igs/pgmprot_igs027a_type2.cpp
++++ b/src/mame/igs/pgmprot_igs027a_type2.cpp
+@@ -37,6 +37,8 @@
+ #include "pgmprot_igs027a_type2.h"
+ 
+ #include "endianness.h"
++#include "cpu/arm7/arm7.h"
++#include "screen.h"
+ 
+ #define LOG_PROT    (1U << 1)
+ #define LOG_ALL     (LOG_PROT)
+@@ -60,6 +62,7 @@ void pgm_arm_type2_state::arm7_latch_arm_w(offs_t offset, u32 data, u32 mem_mask
+ 	LOGPROT("%s ARM7: Latch write: %08x (%08x)\n", machine().describe_context(), data, mem_mask);
+ 
+ 	COMBINE_DATA(&m_kov2_latchdata_arm_w);
++	if (m_cap) cap_record(2, data, mem_mask, true);
+ }
+ 
+ u32 pgm_arm_type2_state::arm7_shareram_r(offs_t offset, u32 mem_mask)
+@@ -77,6 +80,7 @@ void pgm_arm_type2_state::arm7_shareram_w(offs_t offset, u32 data, u32 mem_mask)
+ u16 pgm_arm_type2_state::arm7_latch_68k_r(offs_t offset, u16 mem_mask)
+ {
+ 	LOGPROT("%s M68K: Latch read: %04x (%04x)\n", machine().describe_context(), m_kov2_latchdata_arm_w & 0x0000ffff, mem_mask);
++	if (m_cap && !machine().side_effects_disabled()) cap_record(3, m_kov2_latchdata_arm_w, m_maincpu->pc(), false);
+ 	return m_kov2_latchdata_arm_w;
+ }
+ 
+@@ -85,6 +89,14 @@ void pgm_arm_type2_state::arm7_latch_68k_w(offs_t offset, u16 data, u16 mem_mask
+ 	LOGPROT("%s M68K: Latch write: %04x (%04x)\n", machine().describe_context(), data & 0x0000ffff, mem_mask);
+ 	COMBINE_DATA(&m_kov2_latchdata_68k_w);
+ 
++	if (m_cap)
++	{
++		const u16 *share16 = reinterpret_cast<u16 *>(m_arm7_shareram.target());
++		const u16 cmd = share16[BYTE_XOR_LE(0x10 / 2)];
++		m_cap->set_cmd(cmd);
++		cap_record(1, data, cmd | (u32(m_maincpu->pc()) << 8 & 0xffff0000), true);
++	}
++
+ 	m_prot->set_input_line(arm7_cpu_device::ARM7_FIRQ_LINE, ASSERT_LINE); // guess
+ }
+ 
+@@ -104,6 +116,74 @@ void pgm_arm_type2_state::arm7_ram_w(offs_t offset, u16 data, u16 mem_mask)
+ 	COMBINE_DATA(&share16[BYTE_XOR_LE(offset)]);
+ }
+ 
++void pgm_arm_type2_state::machine_start()
++{
++	pgm_state::machine_start();
++
++	const char *dir = std::getenv("DDP2_CAPTURE");
++	if (!dir)
++		return;
++
++	m_capscreen = subdevice<screen_device>("screen");
++	m_cap = std::make_unique<ddp2_capture>(dir);
++	m_cap->add_region(m_arm7_shareram.target(), 0x10000);
++	m_cap->add_region(m_arm_ram.target(), 0x10000);
++	m_cap->add_region(memshare("iram")->ptr(), 0x400);
++
++	address_space &sp = m_prot->space(AS_PROGRAM);
++	const u32 bases[3] = { 0x48000000, 0x18000000, 0x10000000 };
++	const u32 sizes[3] = { 0x10000, 0x10000, 0x400 };
++	for (int r = 0; r < 3; r++)
++	{
++		const u32 base = bases[r];
++		m_captap[r] = sp.install_read_tap(base, base + sizes[r] - 1, "ddp2cap",
++				[this, r, base] (offs_t offset, u32 &data, u32 mem_mask) { m_cap->read(r, offset - base, mem_mask); },
++				nullptr);
++	}
++
++	address_space &ms = m_maincpu->space(AS_PROGRAM);
++	m_capmain[0] = ms.install_read_tap(0x800000, 0x81ffff, "ddp2cap_r",
++			[this] (offs_t offset, u16 &data, u16 mem_mask) { if (!machine().side_effects_disabled()) m_cap->main_access(false, offset - 0x800000, mem_mask); });
++	m_capmain[1] = ms.install_write_tap(0x800000, 0x81ffff, "ddp2cap_w",
++			[this] (offs_t offset, u16 &data, u16 mem_mask) { m_cap->main_access(true, offset - 0x800000, mem_mask); });
++
++	m_capjob = sp.install_write_tap(0x18000080, 0x18000083, "ddp2cap_job",
++			[this] (offs_t offset, u32 &data, u32 mem_mask) { if (mem_mask & 0xffff) cap_record(4, data, mem_mask, false); });
++
++	// idle loop of the main program (same location MAME's ddp2 speedup uses)
++	m_capidle = ms.install_read_tap(0x80ee54, 0x80ee55, "ddp2cap_idle",
++			[this] (offs_t offset, u16 &data, u16 mem_mask)
++			{
++				if (machine().side_effects_disabled())
++					return;
++				const u32 pc = m_maincpu->pc();
++				if (pc != 0x149dce && pc != 0x149cfe)
++					return;
++				// a gap since the previous idle read means the game did frame work in between:
++				// close the previous idle period (entry cycle, length in reads) and open a new one
++				const u64 now = m_maincpu->total_cycles();
++				if (now - m_idle_last > 400)
++				{
++					if (m_idle_reads)
++						m_cap->record(5, m_idle_frame, m_idle_entry, now, m_idle_reads, u32(m_idle_last - m_idle_entry), false);
++					m_idle_frame = u32(m_capscreen->frame_number());
++					m_idle_entry = now;
++					m_idle_reads = 0;
++				}
++				m_idle_last = now;
++				m_idle_reads++;
++			});
++
++	if (auto *arm = dynamic_cast<arm7_cpu_device *>(m_prot.target()))
++		arm->m_insn_hook = [this] (u32 pc, bool thumb) { m_cap->insn(pc, thumb); };
++}
++
++void pgm_arm_type2_state::cap_record(u8 type, u32 value, u32 aux, bool diffs)
++{
++	m_cap->record(type, m_capscreen ? u32(m_capscreen->frame_number()) : 0,
++			m_maincpu->total_cycles(), m_prot->total_cycles(), value, aux, diffs);
++}
++
+ /* 55857F? */
+ /* Knights of Valor 2, Martial Masters, DoDonpachi 2 */
+ /*  no execute only space? */
+@@ -129,7 +209,7 @@ void pgm_arm_type2_state::_55857F_arm7_map(address_map &map)
+ {
+ 	map(0x00000000, 0x00003fff).rom();
+ 	map(0x08000000, 0x083fffff).rom().r(FUNC(pgm_arm_type2_state::external_rom_r));
+-	map(0x10000000, 0x100003ff).ram();
++	map(0x10000000, 0x100003ff).ram().share("iram");
+ 	map(0x18000000, 0x1800ffff).ram().share("arm_ram");
+ 	map(0x38000000, 0x38000003).rw(FUNC(pgm_arm_type2_state::arm7_latch_arm_r), FUNC(pgm_arm_type2_state::arm7_latch_arm_w)); /* 68k Latch */
+ 	map(0x48000000, 0x4800ffff).rw(FUNC(pgm_arm_type2_state::arm7_shareram_r), FUNC(pgm_arm_type2_state::arm7_shareram_w)).share("arm7_shareram");
+@@ -269,8 +349,11 @@ void pgm_arm_type2_state::init_ddp2()
+ 	pgm_ddp2_decrypt(machine());
+ 	kov2_latch_init();
+ 
+-	m_prot->space(AS_PROGRAM).install_read_handler(0x1800300c, 0x1800300f, read32mo_delegate(*this, FUNC(pgm_arm_type2_state::ddp2_speedup_r)));
+-	m_maincpu->space(AS_PROGRAM).install_read_handler(0x80ee54, 0x80ee55, read16smo_delegate(*this, FUNC(pgm_arm_type2_state::ddp2_main_speedup_r)));
++	if (!std::getenv("DDP2_NOSPEEDUP")) // ddp2bl reference runs need unhacked timing
++	{
++		m_prot->space(AS_PROGRAM).install_read_handler(0x1800300c, 0x1800300f, read32mo_delegate(*this, FUNC(pgm_arm_type2_state::ddp2_speedup_r)));
++		m_maincpu->space(AS_PROGRAM).install_read_handler(0x80ee54, 0x80ee55, read16smo_delegate(*this, FUNC(pgm_arm_type2_state::ddp2_main_speedup_r)));
++	}
+ }
+ 
+ 
+diff --git a/src/mame/igs/pgmprot_igs027a_type2.h b/src/mame/igs/pgmprot_igs027a_type2.h
+index ddf9bcf20b2..2ab4a8e85bb 100644
+--- a/src/mame/igs/pgmprot_igs027a_type2.h
++++ b/src/mame/igs/pgmprot_igs027a_type2.h
+@@ -5,6 +5,10 @@
+ 
+ #pragma once
+ 
++#include "ddp2_capture.h"
++
++#include <memory>
++
+ class pgm_arm_type2_state : public pgm_state
+ {
+ public:
+@@ -28,7 +32,18 @@ public:
+ 	void pgm_arm_type2(machine_config &config);
+ 	void pgm_arm_type2_22m(machine_config &config);
+ 
++protected:
++	virtual void machine_start() override ATTR_COLD;
++
+ private:
++	// ddp2bl analysis instrumentation (inactive unless DDP2_CAPTURE is set)
++	std::unique_ptr<ddp2_capture> m_cap;
++	screen_device *m_capscreen = nullptr;
++	memory_passthrough_handler m_captap[3], m_capmain[2], m_capjob, m_capidle;
++	u32 m_idle_frame = 0, m_idle_reads = 0;
++	u64 m_idle_entry = 0, m_idle_last = 0;
++	void cap_record(u8 type, u32 value, u32 aux, bool diffs);
++
+ 	// kov2
+ 	u32        m_kov2_latchdata_68k_w = 0;
+ 	u32        m_kov2_latchdata_arm_w = 0;
+diff --git a/src/mame/mame.lst b/src/mame/mame.lst
+index f6b031f4526..4b83daa2826 100644
+--- a/src/mame/mame.lst
++++ b/src/mame/mame.lst
+@@ -22057,6 +22057,7 @@ lordgunu
+ ddp2
+ ddp2100
+ ddp2100c
++ddp2bl
+ ddp2100hk
+ ddp2100j
+ ddp2100k
