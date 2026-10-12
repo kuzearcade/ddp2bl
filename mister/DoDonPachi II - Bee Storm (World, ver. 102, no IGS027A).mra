@@ -1,0 +1,59 @@
+<misterromdescription>
+	<name>DoDonPachi II - Bee Storm (World, ver. 102, no IGS027A)</name>
+	<setname>ddp2bl</setname>
+	<rbf>IGSPGM</rbf>
+	<rotation>vertical (ccw)</rotation>
+	<mameversion>288</mameversion>
+	<buttons default="B,A,X,Y,Start,Select,L,R" names="A,B,C,D,-,-,Start,Coin,Pause,SS"/>
+	<switches default="ffff">
+		<dip name="Service Mode" bits="0" ids="On,Off"/>
+		<dip name="Music" bits="1" ids="Off,On"/>
+		<dip name="Voice" bits="2" ids="Off,On"/>
+		<dip name="Free Play" bits="3" ids="On,Off"/>
+		<dip name="Stop" bits="4" ids="On,Off"/>
+		<dip name="Unused 1" bits="5" ids="On,Off"/>
+		<dip name="Unused 2" bits="6" ids="On,Off"/>
+		<dip name="Debug" bits="7" ids="On,Off"/>
+	</switches>
+	<!-- ddp2.zip converted by tools/ddp2bl_build.py: the IGS027A is replaced by 68000 code
+	     in P1, so the cart is a plain PGM cart. Game id 00 = a board without the ARM
+	     (as the unprotected olds103t set); nothing of the ASIC is needed or loaded. -->
+	<rom index="0" address="0x30000000" zip="pgm.zip|ddp2bl.zip">
+		<!-- SYSTEM INFO -->
+		<part>00 00</part>
+
+		<!-- BIOS PROG / TILE / MUSIC -->
+		<part>00 00020000 00000000</part>
+		<part name="pgm_p02s.u20" crc="78c15fa2"/>
+		<part>01 00200000 00000000</part>
+		<part name="pgm_t01s.rom" crc="1a7123a0"/>
+		<part>02 00200000 00000000</part>
+		<part name="pgm_m01s.rom" crc="45ae7159"/>
+
+		<!-- CART PROG: P1 (4MB, 68000 at 0x100000) -->
+		<part>03 00400000 00100000</part>
+		<part name="ddp2bl_p1.27c322" crc="30dcc92f"/>
+
+		<!-- CART TILE: T1 + T2 -->
+		<part>04 00800000 00180000</part>
+		<part name="ddp2bl_t1.27c322" crc="e6637091"/>
+		<part name="ddp2bl_t2.27c322" crc="0024c0e4"/>
+
+		<!-- CART MUSIC: M1 -->
+		<part>05 00400000 00400000</part>
+		<part name="ddp2bl_m1.27c322" crc="82d4015d"/>
+
+		<!-- A ROM (sprite colour): A1-A4 -->
+		<part>06 01000000 00000000</part>
+		<part name="ddp2bl_a1.27c322" crc="ad79e511"/>
+		<part name="ddp2bl_a2.27c322" crc="c4022f02"/>
+		<part name="ddp2bl_a3.27c322" crc="8ce5b496"/>
+		<part name="ddp2bl_a4.27c322" crc="fd10cef9"/>
+
+		<!-- B ROM (sprite mask): B1 + B2 -->
+		<part>07 00800000 00000000</part>
+		<part name="ddp2bl_b1.27c322" crc="1b8548ad"/>
+		<part name="ddp2bl_b2.27c322" crc="d05a4bb2"/>
+	</rom>
+	<nvram index="8" size="131072"/>
+</misterromdescription>
