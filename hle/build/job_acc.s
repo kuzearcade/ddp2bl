@@ -75,6 +75,74 @@ est_start:
 	clr.w	SYS+S_REMOVED_N(a5)
 	rts
 
+;---------------------------------------------------------------------------
+; irq_saved: how many polls the original saved because of the interrupt found during
+; a send() wait (hle_send, send_irq). k = the original's first latch read after it:
+;   stacked PC before T_1 (prologue) or at a pass-1 handler's first instruction: k = 1;
+;   elsewhere in a pass-1 handler: k = 2; in send_wait, pass j = E - (saved loop
+;   counter): k = j at the pass's first instruction, else j + 1; in the last pass: none.
+; HLEV+IRQ_S = max(0, min(E + 1 - k, skip)); skip = IRQ4_SKIP, or any for the vblank
+; handler (its first return address is IRQ6_RET).
+;---------------------------------------------------------------------------
+irq_saved:
+	lea	172(a3),a3		; [cyc] block
+	movem.l	d1-d2/a0,-(sp)
+	moveq	#0,d2
+	move.w	HLEV+IRQ_PC,d2
+	cmpi.w	#(SEND_P1&$ffff),d2
+	bcs	.k1
+	lea	46(a3),a3		; [cyc] fall-through
+	cmpi.w	#(send_wait&$ffff),d2
+	bcs	.p1
+	lea	-28(a3),a3		; [cyc] fall-through
+	cmpi.w	#(SEND_LAST&$ffff),d2
+	bcc	.none
+	lea	94(a3),a3		; [cyc] fall-through
+	move.w	HLEV+IRQ_E,d1
+	sub.w	HLEV+IRQ_D2,d1	; j
+	cmpi.w	#(send_wait&$ffff),d2
+	beq	.calc
+	lea	24(a3),a3		; [cyc] fall-through
+	addq.w	#1,d1
+	bra	.calc
+.p1:
+	cmpi.w	#(snd_14&$ffff),d2
+	beq	.k1
+	lea	52(a3),a3		; [cyc] fall-through
+	ori.l	#(HLE_BASE&$ffff0000),d2
+	movea.l	d2,a0
+	cmpi.w	#$2201,(a0)	; MARK
+	beq	.k1
+	lea	20(a3),a3		; [cyc] fall-through
+	moveq	#2,d1
+	bra	.calc
+.k1:
+	moveq	#1,d1
+.calc:
+	move.w	HLEV+IRQ_E,d2
+	addq.w	#1,d2
+	sub.w	d1,d2	; E + 1 - k
+	ble	.none
+	lea	62(a3),a3		; [cyc] fall-through
+	moveq	#IRQ4_SKIP,d1
+	cmpi.l	#IRQ6_RET,HLEV+IRQ_RET
+	bne	.sk
+	lea	14(a3),a3		; [cyc] fall-through
+	moveq	#127,d1
+.sk:
+	cmp.w	d1,d2
+	bls	.st
+	lea	14(a3),a3		; [cyc] fall-through
+	move.w	d1,d2
+.st:
+	move.w	d2,HLEV+IRQ_S
+	movem.l	(sp)+,d1-d2/a0
+	rts
+.none:
+	clr.w	HLEV+IRQ_S
+	movem.l	(sp)+,d1-d2/a0
+	rts
+
 ; ---------------------------------------------------------------------------
 ; est_results: cmd 14 result packer (ARM $2340)
 ; in: a4 = SHWIN, a5 = HLEV
@@ -106,7 +174,7 @@ PK_S67		equ	338
 PK_HIGH		equ	322
 
 est_results:
-	lea	1108(a3),a3		; [cyc] block
+	lea	1124(a3),a3		; [cyc] block
 	lea	POOL(a5),a0
 	lea	$1500(a4),a1
 	lea	$0EC0(a4),a2
@@ -281,6 +349,8 @@ est_results:
 	addi.w	#(1<<0),d1
 .d_8:
 	move.w	d1,E14(a5)
+	subq.w	#3,d1
+	move.w	d1,E14M3(a5)	; the cmd 14 wait loop count (hle_send)
 	move.w	SYS+S_REMOVED_N(a5),d0
 	beq	.done
 	lea	26(a3),a3		; [cyc] fall-through
@@ -1046,9 +1116,9 @@ est_animate:
 ; ---------------------------------------------------------------------------
 anim_down:
 	subq.w	#1,O_ACNT(a0)	; counter at 0: it wraps (carry), reload below
-	bcs	.cyc_stub142	; @unlikely
+	bcs	.cyc_stub158	; @unlikely
 	rts
-.cyc_stub142:
+.cyc_stub158:
 	lea	234(a3),a3		; [cyc] unlikely edge
 	bra	anim_down_f
 anim_down_f:
@@ -1065,9 +1135,9 @@ anim_down_f:
 
 anim_up:
 	subq.w	#1,O_ACNT(a0)
-	bcs	.cyc_stub147	; @unlikely
+	bcs	.cyc_stub163	; @unlikely
 	rts
-.cyc_stub147:
+.cyc_stub163:
 	lea	238(a3),a3		; [cyc] unlikely edge
 	bra	.f
 .f:
@@ -1173,7 +1243,7 @@ aim:
 st2:
 	lea	448(a3),a3		; [cyc] block
 	move.w	O_TIMER(a0),d0
-	beq	.cyc_stub166	; @unlikely
+	beq	.cyc_stub182	; @unlikely
 	; Fast path (instruction still running): st2_timer's work with the velocity added
 	; to the remainder while it is in a register (taken back if the bullet dies), and
 	; the four bounds as two unsigned ranges: -9 < y < $E8, -9 < x <= $1C7.
@@ -1188,7 +1258,7 @@ st2:
 	andi.w	#$ff00,d1
 	sub.w	d1,d0
 	bra	.s_9
-.cyc_stub166:
+.cyc_stub182:
 	lea	132(a3),a3		; [cyc] unlikely edge
 	bra	st2_script
 .p_9:
@@ -1218,11 +1288,11 @@ st2:
 	move.w	d5,d0
 	addq.w	#8,d0
 	cmpi.w	#$e8+8,d0
-	bcc	.cyc_stub173	; @unlikely
+	bcc	.cyc_stub189	; @unlikely
 	move.w	d4,d0
 	addq.w	#8,d0
 	cmpi.w	#$1c8+8,d0
-	bcc	.cyc_stub174	; @unlikely
+	bcc	.cyc_stub190	; @unlikely
 .on:
 	move.w	d4,d0
 	sub.w	O_OX(a0),d0
@@ -1237,15 +1307,15 @@ st2:
 	move.w	d4,O_X(a0)
 	move.w	d5,O_Y(a0)
 	subq.w	#1,O_ACNT(a0)	; counter at 0: it wraps (carry), reloaded by st2_frame
-	bcs	.cyc_stub175	; @unlikely
+	bcs	.cyc_stub191	; @unlikely
 	rts
-.cyc_stub173:
+.cyc_stub189:
 	lea	10(a3),a3		; [cyc] unlikely edge
 	bra	.off
-.cyc_stub174:
+.cyc_stub190:
 	lea	38(a3),a3		; [cyc] unlikely edge
 	bra	.off
-.cyc_stub175:
+.cyc_stub191:
 	lea	228(a3),a3		; [cyc] unlikely edge
 	bra	st2_frame
 .off:
@@ -1533,13 +1603,13 @@ st2_advance:
 st2_timer:
 	move.w	d0,O_TIMER(a0)
 	cmpi.w	#-9,d5
-	ble	.cyc_stub224	; @unlikely
+	ble	.cyc_stub240	; @unlikely
 	cmpi.w	#$e8,d5
-	bge	.cyc_stub225	; @unlikely
+	bge	.cyc_stub241	; @unlikely
 	cmpi.w	#-9,d4
 	ble	.off	; @unlikely
 	cmpi.w	#$1c7,d4
-	bgt	.cyc_stub227	; @unlikely
+	bgt	.cyc_stub243	; @unlikely
 .on:
 	move.w	d4,d0
 	sub.w	O_OX(a0),d0
@@ -1558,18 +1628,18 @@ st2_timer:
 	move.w	O_VY(a0),d0
 	add.w	d0,O_AY(a0)
 	subq.w	#1,O_ACNT(a0)
-	bcs	.cyc_stub228	; @unlikely
+	bcs	.cyc_stub244	; @unlikely
 	rts
-.cyc_stub224:
+.cyc_stub240:
 	lea	-22(a3),a3		; [cyc] unlikely edge
 	bra	.off
-.cyc_stub225:
+.cyc_stub241:
 	lea	-2(a3),a3		; [cyc] unlikely edge
 	bra	.off
-.cyc_stub227:
+.cyc_stub243:
 	lea	38(a3),a3		; [cyc] unlikely edge
 	bra	.off
-.cyc_stub228:
+.cyc_stub244:
 	lea	228(a3),a3		; [cyc] unlikely edge
 	bra	st2_frame
 .off:
@@ -1984,9 +2054,9 @@ st5:
 	ori.w	#$8000,d0
 	move.w	d0,O_SPRY(a0)
 	subq.w	#1,O_ACNT(a0)	; anim_down, inline
-	bcs	.cyc_stub298	; @unlikely
+	bcs	.cyc_stub314	; @unlikely
 	rts
-.cyc_stub298:
+.cyc_stub314:
 	lea	234(a3),a3		; [cyc] unlikely edge
 	bra	anim_down_f
 

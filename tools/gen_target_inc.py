@@ -76,6 +76,38 @@ def main(target, arm_internal, out):
         lines.append("\tdc.w\t" + ",".join("$%04X" % w for w in words[i:i + 12]))
     lines.append("\tendm")
     lines.append("POLL_PERIOD_X10\tequ\t%d" % (tm["poll_period"] * 10))
+    # idle loop re-entry (hle_idle): for each DEBT mod period, the pass boundary to jump
+    # to and the pad (a multiple of 4: nops) that puts us there in the original's phase
+    il = cfg["idle_loop"]
+    for k, n in (("cb_count", "CBN"), ("cb_table", "CBTAB"), ("cb_index", "IDX"), ("callback", "CB"),
+                 ("cb_return", "RET"), ("cb_last", "LAST"), ("cb_countdown", "CNTDN")):
+        lines.append("IDLE_%s\tequ\t$%X" % (n, int(il[k], 16)))
+    names = {0: "L0", 28: "L28", 48: "L48", 78: "L78", 106: "L106", 122: "L122", 132: "L132",
+             144: "L144", 162: "L162", 190: "C12", 210: "C32", 242: "C64", 254: "C76"}
+    for b, addr, _ in il["boundaries"]:
+        if b in names:
+            lines.append("IDLE_%s\tequ\t$%X" % (names[b], int(addr, 16)))
+    choice = []
+    for q in range(4):                     # quarters: +1 index 0 at entry, +2 callback pending
+        for r in range(per):
+            x = (il["entry_phase"] + r + il["common"] + (il["first_pass_skip"] if q & 1 else 0)
+                 - (il["callback_long_extra"] if q & 2 else 0)) % per   # skip: ahead; long path: behind
+            best = None
+            for b, _, setup in il["boundaries"]:
+                p = (b - x - setup) % per
+                if (p % 4 == 0 or p >= 6) and (best is None or p < best[1]):
+                    best = (b, p)
+            choice.append(best)
+    nsled = max(p // 4 if p % 4 == 0 else (p - 6) // 4 for _, p in choice)
+    lines.append("IDLE_SLED\tequ\t%d" % nsled)
+    lines.append("IDLE2TAB_DATA\tmacro")
+    ents = [("IST%d-.etab+%d" % (b, 2 * (nsled - p // 4))) if p % 4 == 0 else
+            ("ISTB%d-.etab+%d" % (b, 2 * (nsled - (p - 6) // 4))) for b, p in choice]
+    for i in range(0, len(ents), 6):
+        lines.append("\tdc.w\t" + ",".join(ents[i:i + 6]))
+    lines.append("\tendm")
+    lines.append("IRQ6_RET\tequ\t$%X" % int(cfg["irq6_return"], 16))
+    lines.append("IRQ4_SKIP\tequ\t%d" % cfg["irq4_skip_polls"])
     open(out, "w").write("\n".join(lines) + "\n")
 
 

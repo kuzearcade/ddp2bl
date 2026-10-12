@@ -169,35 +169,49 @@ update there (the original would not).
     original, `$0002` converted); every rendered pixel is identical (the tiles are blank). On the original
     hardware this value depends on the same interrupt timing.
 
-## 68000/Z80 phase (investigated)
+## 68000/Z80 phase
 
 The sound CPU sees the same values, in the same order, from both sets, but not always at
-the same cycle. Measured on the two-player max-load session (51,384 frames, MAME, interrupted
-PC of every vblank interrupt; cycle-stamped 68000 traces aligned instruction by instruction):
+the same cycle, and it amplifies small differences into occasional long handshake stalls
+(below). Two sources of such 68000 timing offsets are now handled; measured on the
+two-player max-load session (MAME, interrupted PC of every vblank interrupt over 52,000
+frames; cycle-stamped 68000 traces aligned instruction by instruction):
 
-* The vblank interrupt lands on the same instruction in both sets in only 21% of frames;
-  in-step stretches last up to ~500 frames. In the other frames the converted set's
-  frame starts by tens to a few hundred cycles earlier or later, and so do the vblank
-  handler's sound-latch writes and its writes into Z80 RAM (`$C10006/8`, typically +-10 to
-  +-30 cycles: the interrupt acknowledge is synchronised to the 68000 E clock, 10 cycles).
-* Where an offset starts (the idle-loop phase lock only repays the job; an offset from
-  anything else persists until another one cancels it):
-  - IRQ4 (scanline 0, ~660-cycle handler) inside a `send()` wait: the original's poll
-    loop counts the handler as waiting time and needs fewer polls; the replacement's wait
-    has a fixed length (e.g. frame 990: +90 cycles);
-  - ARM reply jitter mispredicted by one poll (0.05% of cmd 12, 0.6% of cmd 14);
-  - the vblank interrupt arriving while the idle hook is still repaying the job (once in
-    51,384 frames, at the first gameplay frame 617);
-  - once the two Z80s differ, the vblank handler's Z80 handshake takes different numbers
-    of polls, which offsets the 68000 again.
-* These cannot be removed exactly. The original's wait ends when the ARM's latch byte
-  changes; a replacement loop with the same instructions (same interrupt latency) has no
-  way to make a byte change at the right moment (the 68000 has no timer), and a loop that
-  detects IRQ4 and compensates has different instructions, i.e. still 10-cycle offsets. The
-  ARM's jitter depends on ARM-internal time the 68000 cannot see.
-* Effect: occasionally a long Z80 handshake stall (~200,000 cycles) in one set only; in
-  the sessions run so far this changed the game twice (two-player no-cheat session,
-  original stalls; two-player max-load session with the current build, converted set
-  stalls). On a real PGM the Z80 has its own crystal, so this phase is not reproducible
-  either; with the Z80 detuned by +-30 ppm the original diverges from itself in the
-  no-cheat session at the same frame, but stays identical in the max-load session.
+* **The idle hook** used to burn 724 + (up to 330) cycles before handing back to the
+  game's polling loop; a vblank or scanline interrupt arriving in that window landed
+  differently, and the offset persisted. hle_idle now jumps into the original loop at
+  the instruction the original is executing at that moment (any of 16 boundaries of the
+  330-cycle pass, stubs that set up the loop's state, including the callback's stack
+  frame; table by DEBT mod 330, kept in DPH when DEBT changes). It models the original's
+  first pass after entry: the callback index is usually 0 then (the pass skips its clear,
+  26 cycles shorter), and when the callback has a vblank to catch up on it takes its long
+  path (84 cycles longer; the hook performs its two RAM updates). Window: 380 + pad + setup
+  cycles instead of 910 + D; the once-a-minute clock read (countdown 0) and other callback
+  sets use the old way.
+* **Interrupts during a send() wait.** The replacement's wait is laid out in 94-cycle
+  passes that start exactly at the original's latch reads; a sentinel word below the
+  stack pointer, armed where the original posts the latch, shows afterwards whether an
+  interrupt was taken, its stacked PC (and the saved loop counter) when, and the handler's
+  first return address which one. irq_saved (job.s) computes the polls the original saved;
+  the difference (and the cost of the check) goes into DEBT and is repaid at the idle
+  loop. A residual remains: the interrupt lands on a different instruction than in the
+  original, and the acknowledge is synchronised to the 10-cycle E clock, so 10-20 cycles
+  can remain (seen at frame 990 of the session).
+
+Result: the vblank interrupt lands on the same instruction in both sets in 31% of frames
+(before: 23%); in-step stretches are longer. The remaining offsets come from the residual
+above, the scanline-0 interrupt arriving during the (shorter) idle-hook window, ARM poll
+mispredictions, and the Z80 handshake itself once the Z80s differ. In the sessions run, the
+two-player max-load game now diverges at logical frame 58,150 (before: 51,157), the
+two-player no-cheat game still at 9,642 (a stall in the original's own Z80 timing, which
+the original does not reproduce either with its Z80 detuned by 30 ppm).
+
+Side effect: the sentinel ($FFFF) is written into dead stack below the stack pointer,
+where the original leaves older data. Game code that reads uninitialised stack (as the
+blank-tile attribute bug does) can copy it: two RAM bytes in one logical frame of the
+one-player no-cheat game (`$80004A`, `$80F036`, `$FF` instead of `$00`), with one video
+frame's sprite buffer; no pixel differs. Restoring the word would need cycles the send
+prologue does not have (it must be armed by +44).
+
+Cost: the cmd 14 job path computes DEBT mod 330 (580 cycles, counted in the debt): every
+margin above is about 590 cycles smaller (tightest: 11,213 cycles, one-player final boss).

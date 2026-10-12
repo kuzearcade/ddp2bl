@@ -53,7 +53,7 @@
   "reloc_base": "0x818000",
   "reloc_size": "0x3400",
   "hlev_base": "0x81B400",
-  "hlev_size": "0x23A8",
+  "hlev_size": "0x23BC",
   "hlev_latch_offset": "0x2388",
   "seq_var": "0x808C9C",
   "hle_base": "0x262000",
@@ -75,6 +75,19 @@
   "idle_hook": "0x145C86",
   "idle_trampoline": "0x145C16",
   "idle_resume": "0x145CBE",
+  "idle_loop": {
+    "note": "the game's vblank-wait polling loop: one pass = 330 cycles with one callback; boundary offset -> address, and the cycles our stub needs to set up that state (incl. its jmp)",
+    "cb_count": "0x808D8A", "cb_table": "0x808D66", "cb_index": "0x808D86",
+    "callback": "0x149DC0", "cb_return": "0x145CB8",
+    "entry_phase": 310, "common": 380, "first_pass_skip": 26, "callback_long_extra": 84,
+    "cb_last": "0x80EE54", "cb_countdown": "0x80EE50",
+    "boundaries": [[0, "0x145C88", 36], [28, "0x145C90", 36], [48, "0x145C96", 36], [78, "0x145C9E", 36],
+                   [106, "0x145CA4", 40], [122, "0x145CAA", 44], [132, "0x145CAC", 44], [144, "0x145CB2", 56],
+                   [162, "0x145CB6", 52], [178, "0x149DC0", 60], [190, "0x149DC2", 72], [210, "0x149DC8", 92],
+                   [242, "0x149DEA", 92], [254, "0x149DEC", 60], [270, "0x145CB8", 40], [298, "0x145CBE", 36]]
+  },
+  "irq6_return": "0x13E836",
+  "irq4_skip_polls": 7,
   "timing": {
     "send_base_cycles": 266,
     "poll_period": 94,
@@ -110,7 +123,7 @@
       "note": "ARM reply 4047 + 30 n(1-3) + 54 n4 + 34 n5 + 49 n(6,7) + (2 + 9 removed if any) + j, j in {0 (82%), 3}"
     },
     "idle_pre": 0,
-    "idle_after_r": 724,
+    "idle_after_r": 910,
     "delay_fix": 82,
     "delay_sled": 4
   },

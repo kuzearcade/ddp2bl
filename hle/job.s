@@ -59,6 +59,58 @@ est_start:
 	clr.w	SYS+S_REMOVED_N(a5)
 	rts
 
+;---------------------------------------------------------------------------
+; irq_saved: how many polls the original saved because of the interrupt found during
+; a send() wait (hle_send, send_irq). k = the original's first latch read after it:
+;   stacked PC before T_1 (prologue) or at a pass-1 handler's first instruction: k = 1;
+;   elsewhere in a pass-1 handler: k = 2; in send_wait, pass j = E - (saved loop
+;   counter): k = j at the pass's first instruction, else j + 1; in the last pass: none.
+; HLEV+IRQ_S = max(0, min(E + 1 - k, skip)); skip = IRQ4_SKIP, or any for the vblank
+; handler (its first return address is IRQ6_RET).
+;---------------------------------------------------------------------------
+irq_saved:
+	movem.l	d1-d2/a0,-(sp)
+	moveq	#0,d2
+	move.w	HLEV+IRQ_PC,d2
+	cmpi.w	#(SEND_P1&$ffff),d2
+	bcs.s	.k1
+	cmpi.w	#(send_wait&$ffff),d2
+	bcs.s	.p1
+	cmpi.w	#(SEND_LAST&$ffff),d2
+	bcc.s	.none
+	move.w	HLEV+IRQ_E,d1
+	sub.w	HLEV+IRQ_D2,d1		; j
+	cmpi.w	#(send_wait&$ffff),d2
+	beq.s	.calc
+	addq.w	#1,d1
+	bra.s	.calc
+.p1:	cmpi.w	#(snd_14&$ffff),d2
+	beq.s	.k1
+	ori.l	#(HLE_BASE&$ffff0000),d2
+	movea.l	d2,a0
+	cmpi.w	#$2201,(a0)		; MARK
+	beq.s	.k1
+	moveq	#2,d1
+	bra.s	.calc
+.k1:	moveq	#1,d1
+.calc:	move.w	HLEV+IRQ_E,d2
+	addq.w	#1,d2
+	sub.w	d1,d2			; E + 1 - k
+	ble.s	.none
+	moveq	#IRQ4_SKIP,d1
+	cmpi.l	#IRQ6_RET,HLEV+IRQ_RET
+	bne.s	.sk
+	moveq	#127,d1
+.sk:	cmp.w	d1,d2
+	bls.s	.st
+	move.w	d1,d2
+.st:	move.w	d2,HLEV+IRQ_S
+	movem.l	(sp)+,d1-d2/a0
+	rts
+.none:	clr.w	HLEV+IRQ_S
+	movem.l	(sp)+,d1-d2/a0
+	rts
+
 	include	"est_results.s"
 	include	"est_spawn.s"
 	include	"est_engine.s"

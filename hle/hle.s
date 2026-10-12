@@ -36,7 +36,15 @@ TMP		equ	$2390		; word: job scratch
 PROBE		equ	$2392		; 16 bytes: verification probe writes (MAME DDP2BL_PROBE)
 DEBT		equ	$23A2		; long: cycles spent beyond the original (repaid mod 330 at idle)
 BOOTED		equ	$23A6		; word: first cmd 01 (ARM resynchronisation) seen
-HLEV_SIZE	equ	$23A8
+DPH		equ	$23A8		; word: DEBT mod 330 (kept with DEBT, read by hle_idle)
+E14M3		equ	$23AA		; word: E14 - 3 (the cmd 14 wait loop count)
+IRQ_PC		equ	$23AC		; word: low word of the PC an interrupt stacked during a wait
+IRQ_D2		equ	$23AE		; word: the wait loop counter it saved
+IRQ_E		equ	$23B0		; word: E of that wait
+IRQ_S		equ	$23B2		; word: polls the original saved (irq_saved)
+IRQ_RET		equ	$23B4		; long: the handler's first return address (IRQ4 / IRQ6)
+IRQ_A3		equ	$23B8		; long: a3 of the game while irq_saved runs
+HLEV_SIZE	equ	$23BC
 
 ; --- SYS fields (ARM offsets, halfwords) -----------------------------------
 S_COUNT		equ	$00		; request count / header [0..$17] round-trips via $1F00
@@ -98,13 +106,30 @@ O_OY		equ	$42
 ; We do the command and leave exactly the RAM/register effects of that path:
 ; seq var += 1 (& $7F), echo var = new seq, status var = 0, poll counter =
 ; $2710 - (E+1), d0.b = new seq (upper d0 unchanged), X = 0; d2 is free.
-; Cheap commands are padded to exactly that many cycles. The variable waits
-; (12/13/14) use a 94-cycle loop which, like the original poll loop, ends early
-; when the vblank interrupt (IRQ6) fires during the wait.
+;
+; The wait is laid out like the original's: the original reads the latch at
+; T_k = 172 + 94(k-1), k = 1..E+1, and returns 94 cycles after the read that
+; succeeds. Pass 1 (from T_1, per command: the command's work) is followed by
+; send_wait (passes 2..E, 94 cycles each, starting exactly at T_k) and the last
+; pass (send_last), so every T_k is an instruction boundary here too.
+;
+; Interrupts during the wait. In the original, an interrupt taken before the read at
+; T_k (and after the latch write) delays that read by the handler's run time; if the
+; ARM has replied by then, send() returns after fewer polls: after poll
+; k* = max(k, E+1-skip), skip = the polls the handler covers (IRQ4, ~664 cycles: 7;
+; the vblank handler: all). We do not end early (the command's work does not fit):
+; the send keeps its length and the 94*(E+1-k*) cycles it is late are added to DEBT,
+; which hle_idle repays. The interrupt is found afterwards from its stack frame: a
+; sentinel word below the stack pointer, armed where the original posts the latch,
+; is overwritten by the stacked PC, which locates the interrupted instruction (and,
+; in send_wait, the loop counter the handler saved gives the pass); the handler's first
+; return address tells IRQ4 from IRQ6 (irq_saved in job.s).
 ; Cycle counts per instruction are in the comments (MC68000 manual tables).
 ; ---------------------------------------------------------------------------
 hle_send:				; 12 (the jmp that got us here)
-	move.l	d1,-(sp)		; 12
+	nop				;  4  an interrupt taken by here precedes the latch post
+	move.w	#$ffff,-6(sp)		; 16  sentinel (odd: no stacked PC is $xxxxFFFF)
+	move.l	d1,-(sp)		; 12  sentinel now at -2(sp)
 	move.b	SEQVAR,d0		; 16
 	addq.b	#1,d0			;  4  (X = 0: seq <= $80)
 	andi.b	#$7f,d0			;  8
@@ -112,10 +137,9 @@ hle_send:				; 12 (the jmp that got us here)
 	clr.w	STATUSVAR		; 20
 	move.b	d0,ECHOVAR		; 16
 	move.b	d0,HLEV+LATCH		; 16  (read only by the game's error helper)
-	move.l	VBLCNT,d1		; 20  vblank counter at the start of the wait
 	add.w	d2,d2			;  4
 	move.w	.tab(pc,d2.w),d2	; 14
-	jmp	.tab(pc,d2.w)		; 14  = 172
+	jmp	.tab(pc,d2.w)		; 14  = 172 = T_1, the original's first latch read
 .tab:	dc.w	snd_none-.tab, snd_01-.tab, snd_02-.tab, snd_03-.tab
 	dc.w	snd_04-.tab, snd_none-.tab, snd_none-.tab, snd_none-.tab
 	dc.w	snd_none-.tab, snd_09-.tab, snd_0a-.tab, snd_none-.tab
@@ -139,99 +163,188 @@ PAD		macro
 		endif
 		endm
 
-; DELAY n: burn exactly n cycles using d2 for long delays (n even, n = 0 or >= 4)
-DELAY		macro
-		if (\1)<64
-		PAD	\1
+; MODDEBT Dn: HLEV+DPH = HLEV+DEBT mod 330, in constant time (580 cycles); clobbers Dn
+MODSTEPR	macro
+		cmpi.l	#(330<<\2),\1		; 14
+		bcs.s	.s\@			; 10 / 8
+		subi.l	#(330<<\2),\1		; 16
+		bra.s	.j\@			; 10
+.s\@:		PAD	24
+.j\@:
+		endm
+MODDEBT		macro
+		move.l	HLEV+DEBT,\1		; 20
+		addi.l	#330*512,\1		; 16  (keeps it positive; 330*512 = 0 mod 330)
+		MODSTEPR	\1,10
+		MODSTEPR	\1,9
+		MODSTEPR	\1,8
+		MODSTEPR	\1,7
+		MODSTEPR	\1,6
+		MODSTEPR	\1,5
+		MODSTEPR	\1,4
+		MODSTEPR	\1,3
+		MODSTEPR	\1,2
+		MODSTEPR	\1,1
+		MODSTEPR	\1,0			; 528
+		move.w	\1,HLEV+DPH		; 16
+		endm
+
+; MARK: first instruction of a pass-1 handler (it starts at T_1): irq_saved recognises
+; an interrupt taken just before the first read by this opcode at the stacked PC
+MARK		macro
+		move.l	d1,d1			; 4  ($2201)
+		endm
+
+; P1END E, work[, np]: end of the command's part (it started at T_1 and has spent
+; "work" cycles, MARK included). The handler covers passes 1..np (default 1).
+; d1 = E for the last pass; d2 = loop count for send_wait.
+P1END		macro
+		ifb	\3
+NP\@		set	1
 		else
-		move.w	#(((\1)-22-4)/10),d2	; 8
-.d\@:		dbra	d2,.d\@			; 10 per pass, 14 at the end
-		PAD	(\1)-22-10*(((\1)-22-4)/10)
+NP\@		set	\3
+		endif
+		moveq	#\1,d1			; 4
+		if (\1)=NP\@
+		PAD	(94*NP\@-4-10-(\2))
+		bra	send_last94		; 10
+		else
+		moveq	#(\1)-NP\@-1,d2		; 4
+		PAD	(94*NP\@-8-10-(\2))
+		bra	send_wait		; 10
 		endif
 		endm
 
-; FIXED cmd, E, work: pad a cheap command to 266 + E*94 cycles in total.
-; The caller has done "work" cycles of command work; we add the poll residue
-; (20) and the epilogue (24).
-FIXED		macro
-		move.w	#($2710-1-(\1)),POLLVAR+2	; 20
-		DELAY	(266+(\1)*94-172-24-20-(\2))
-		move.l	(sp)+,d1		; 12
-		jmp	SEND_EXIT		; 12
-		endm
-
+SEND_P1:				; pass-1 handlers (irq_saved: k = 2 here, unless at a MARK)
 snd_none:				; unused commands: "UNUSED HRQCMD", no 68k-visible effect
-	FIXED	1,0
+	MARK
+	P1END	1,4
 snd_01:					; system init: no 68k-visible effect. The first one after
-	tst.w	HLEV+BOOTED		; 16	power-on is the ARM's resynchronisation, a longer path.
+	MARK				;	power-on is the ARM's resynchronisation, a longer path.
+	tst.w	HLEV+BOOTED		; 16
 	bne.s	.again			; 10 / 8
 	move.w	#1,HLEV+BOOTED		; 20
 	clr.w	HLEV+PENDING		; 20  (stale after a power cycle)
 	clr.l	HLEV+DEBT		; 28
-	FIXED	E_CMD01BOOT,(16+8+20+20+28)
-.again:	FIXED	E_CMD01,(16+10)
-snd_02:	FIXED	E_CMD02,0
-snd_03:	move.w	#1,SHWIN+$20		; 20  reset flag never left set
-	FIXED	E_CMD03,20
-snd_04:	clr.w	SHWIN+$20		; 20  message queue always empty
-	FIXED	E_CMD04,20
-snd_09:	move.l	SHWIN+$20,HLEV+GLOB	; 36
+	clr.w	HLEV+DPH		; 20
+	P1END	E_CMD01BOOT,(4+16+8+20+20+28+20),2
+.again:	P1END	E_CMD01,(4+16+10)
+snd_02:	MARK
+	P1END	E_CMD02,4
+snd_03:	MARK
+	move.w	#1,SHWIN+$20		; 20  reset flag never left set
+	P1END	E_CMD03,24
+snd_04:	MARK
+	clr.w	SHWIN+$20		; 20  message queue always empty
+	P1END	E_CMD04,24
+snd_09:	MARK
+	move.l	SHWIN+$20,HLEV+GLOB	; 36
 	move.l	SHWIN+$24,HLEV+GLOB+4	; 36
-	FIXED	E_CMD09,72
-snd_0a:	move.l	SHWIN+$20,HLEV+GLOB+8	; 36
+	P1END	E_CMD09,76
+snd_0a:	MARK
+	move.l	SHWIN+$20,HLEV+GLOB+8	; 36
 	move.l	SHWIN+$24,HLEV+GLOB+12	; 36
-	FIXED	E_CMD0A,72
-snd_16:	clr.w	SHWIN+$22		; 20  RAM test passed
-	FIXED	E_CMD16,20
-snd_17:	clr.w	SHWIN+$22		; 20
-	FIXED	E_CMD17,20
-
-; variable wait: d2.w = E (>= 2), "work" = cycles spent since the dispatch.
-; total = 172 + work + 44 + (E-1)*94 + 4 + pad + 24 = 266 + E*94  ->  pad = 116 - work
-WAITE		macro
-		move.w	#$270f,POLLVAR+2	; 20
-		sub.w	d2,POLLVAR+2		; 20  residue = $2710 - (E+1)
-		subq.w	#2,d2			;  4  E-1 passes
-.w\@:		cmp.l	VBLCNT,d1		; 22
-		bne.s	.irq\@			;  8
-		PAD	54
-		dbra	d2,.w\@			; 10 / 14
-		PAD	(116-(\1))
-		move.l	(sp)+,d1		; 12
-		jmp	SEND_EXIT		; 12
-.irq\@:		; vblank fired during the wait: like the original, stop at the next poll
-		addq.w	#1,d2
-		add.w	d2,POLLVAR+2		; fewer polls were made
-		move.l	(sp)+,d1
-		jmp	SEND_EXIT
-		endm
+	P1END	E_CMD0A,76
+snd_16:	MARK
+	clr.w	SHWIN+$22		; 20  RAM test passed
+	P1END	E_CMD16,24
+snd_17:	MARK
+	clr.w	SHWIN+$22		; 20
+	P1END	E_CMD17,24
 
 ; cmd 12 / 13: the ARM accepts the job and runs it in the background while the 68k
 ; carries on with its frame; on the 68000 it runs at the next cmd 14 (snd_14_job).
-snd_13:	move.w	#$13,HLEV+PENDING	; 20  (a job left pending is run by cmd 14 first)
+snd_13:	MARK
+	move.w	#$13,HLEV+PENDING	; 20  (a job left pending is run by cmd 14 first)
 	bra.s	snd_1213		; 10
-snd_12:	move.w	#$12,HLEV+PENDING	; 20
+snd_12:	MARK
+	move.w	#$12,HLEV+PENDING	; 20
 	PAD	10			; 10  (same path length as snd_13)
 snd_1213:
 	move.w	SHWIN+$1F00,d2		; 16  number of requests
 	andi.w	#$7f,d2			;  8
-	move.l	a0,-(sp)		; 12
-	lea	E12TAB,a0		; 12
-	move.b	(a0,d2.w),d2		; 14
-	movea.l	(sp)+,a0		; 12
-	andi.w	#$ff,d2			;  8  = 112 since dispatch
-	WAITE	112
-E12TAB:	E12TAB_DATA			; extra polls for cmd 12 by request count
+	move.b	E12TAB(pc,d2.w),d2	; 14  (d2 < $80: the word is E)
+	move.w	d2,d1			;  4  E (>= 2)
+	subq.w	#2,d2			;  4
+	PAD	(94-34-16-8-14-4-4-10)
+	bra	send_wait		; 10
+E12TAB:	E12TAB_DATA			; extra polls for cmd 12 by request count (8-bit reach)
 	even
+
+; cmd 14: PENDING 0 = results ready; $12 / $113 = a job to run here; $13 = the ARM is
+; still animating after cmd 13 (busy answer). No MARK: irq_saved knows snd_14.
+snd_14:	move.w	HLEV+PENDING,d1		; 16
+	cmpi.w	#$13,d1			;  8
+	beq.s	snd_14_busy		; 10 / 8
+	tst.w	d1			;  4
+	bne	snd_14_job		; 10 / 12
+	move.w	#1,SHWIN+$20		; 20  done
+	move.w	HLEV+E14,d1		; 16  E (>= 2)
+	move.w	HLEV+E14M3,d2		; 16
+	; the handler covers passes 1 and 2 (E14 >= 40: whether an interrupt in its second
+	; half counts as before read 2 or read 3 changes nothing, 7 polls are saved either way)
+	PAD	(2*94-16-8-8-4-12-20-16-16-10)
+	bra	send_wait		; 10  pass 3, d2 = E - 3
+
+; cmd 14 right after cmd 13: the game sends it ~2400 cycles after cmd 13, while the
+; ARM is still running the animation job (3870-4030 ARM cycles, measured), so the
+; ARM answers "not done" at once and packs nothing; the game waits ~18700 cycles and
+; asks again (the job has long finished by then). Mark the job as reported busy
+; ($113: hle_run_job only looks at the low byte); the next cmd 14 runs it.
+snd_14_busy:				; 34 cycles after T_1
+	move.w	#$113,HLEV+PENDING	; 20
+	clr.w	SHWIN+$20		; 20  not done
+	P1END	E_CMD14BUSY,(34+40)
+
+; passes 2..E: pass k starts here exactly at T_k with d2 = E - k
+send_wait:
+	PAD	84
+	dbra	d2,send_wait		; 10 / 14
+	bra	send_last80		; 10  (last pass, 24 cycles in)
+SEND_LAST:
+send_last94:				; last pass (E+1), from a pass-1 handler
+	PAD	14
+send_last80:
+	cmpi.w	#$ffff,-2(sp)		; 16  interrupted during the wait?
+	bne.s	send_irq		;  8 / 10
+	move.w	#$270f,d2		;  8
+	sub.w	d1,d2			;  4
+	move.w	d2,POLLVAR+2		; 16  residue = $2710 - (E+1)
+	PAD	4
+	move.l	(sp)+,d1		; 12
+	jmp	SEND_EXIT		; 12  = 80: T_(E+1) + 94 = 266 + 94E
+send_irq:				; 26 cycles into send_last80
+	move.w	-2(sp),HLEV+IRQ_PC	; 24  stacked PC (low word)
+	move.w	-56(sp),HLEV+IRQ_D2	; 24  d2 saved by the handler's movem.l d0-d7/a0-a6
+	move.l	-70(sp),HLEV+IRQ_RET	; 32  return address of the handler's first jsr
+	move.w	d1,HLEV+IRQ_E		; 16
+	move.l	a3,HLEV+IRQ_A3		; 20
+	suba.l	a3,a3			;  8
+	bsr	irq_saved		; 18  (+ a3)
+	move.w	HLEV+IRQ_S,d2		; 16  polls saved
+	sub.w	d2,d1			;  4  polls made - 1
+	mulu.w	#94,d2			; 52  (38 + 2 * 5 bits + #)
+	add.l	a3,d2			;  8
+	addi.l	#IRQ_FIX,d2		; 16
+	add.l	d2,HLEV+DEBT		; 28
+	MODDEBT	d2			; 580
+	move.w	#$270f,d2		;  8
+	sub.w	d1,d2			;  4
+	move.w	d2,POLLVAR+2		; 16  residue = $2710 - polls made
+	movea.l	HLEV+IRQ_A3,a3		; 20
+	move.l	(sp)+,d1		; 12
+	jmp	SEND_EXIT		; 12
+; this path takes 26 + 124 + 18 + a3 + 776 cycles where send_last80 takes 80
+IRQ_FIX		equ	26+124+18+16+4+52+8+16+28+580+8+4+16+20+12+12-80
 
 ; cmd 14 with the job pending: the ARM ran it concurrently with the 68k's game code
 ; between cmd 12 and cmd 14; on the 68000 it runs here. Its exact cost (a3, from the
 ; cycle accounting in job.s) minus what the original spent in this send() (266 + E*94)
 ; is added to DEBT, which hle_idle repays modulo the 330-cycle polling period so that
 ; the frame's vblank lands in the polling loop exactly as in the original.
-;   fixed cycles here: 172 (prologue) + 20 + 8 + 16 + 10 + 174 + 376 = 776, so
-;   debt = a3 + 776 - 266 - 94*E = a3 + 510 - 94*E
-snd_14_job:				; after prologue (172) + cmpi (20) + beq (8) + tst (16) + bne (10)
+;   fixed cycles here: 172 (prologue) + 16 + 8 + 8 + 4 + 10 + 174 + 376 + 580 = 1348,
+;   so debt = a3 + 1348 - 266 - 94*E = a3 + 1082 - 94*E
+snd_14_job:
 	movem.l	d0-d7/a0-a6,-(sp)	; 128
 	suba.l	a3,a3			;   8
 	move.l	a3,HLEV+PROBE		;  20  probe 0
@@ -241,8 +354,9 @@ snd_14_job:				; after prologue (172) + cmpi (20) + beq (8) + tst (16) + bne (10
 	move.w	HLEV+E14,d1		;  16
 	mulu.w	#94,d1			;  52
 	sub.l	d1,d0			;   8
-	addi.l	#510,d0			;  16
+	addi.l	#1082,d0		;  16
 	add.l	d0,HLEV+DEBT		;  28
+	MODDEBT	d0			; 580
 	move.w	#1,SHWIN+$20		;  20  done
 	move.w	HLEV+E14,d2		;  16
 	move.w	#$270f,POLLVAR+2	;  20
@@ -251,34 +365,16 @@ snd_14_job:				; after prologue (172) + cmpi (20) + beq (8) + tst (16) + bne (10
 	move.l	(sp)+,d1		;  12
 	jmp	SEND_EXIT		;  12
 
-; cmd 14: results are ready (no job pending): exact original timing
-snd_14:	cmpi.w	#$13,HLEV+PENDING	; 20
-	beq.s	snd_14_busy		;  8 / 10
-	tst.w	HLEV+PENDING		; 16
-	bne.s	snd_14_job		;  8 / 10
-	move.w	#1,SHWIN+$20		; 20  done
-	move.w	HLEV+E14,d2		; 16  = 88
-	WAITE	88
-
-; cmd 14 right after cmd 13: the game sends it ~2400 cycles after cmd 13, while the
-; ARM is still running the animation job (3870-4030 ARM cycles, measured), so the
-; ARM answers "not done" at once and packs nothing; the game waits ~18700 cycles and
-; asks again (the job has long finished by then). Mark the job as reported busy
-; ($113: hle_run_job only looks at the low byte); the next cmd 14 runs it.
-snd_14_busy:				; after prologue (172) + cmpi (20) + beq taken (10)
-	move.w	#$113,HLEV+PENDING	; 20
-	clr.w	SHWIN+$20		; 20  not done
-	FIXED	E_CMD14BUSY,(20+10+20+20)
-
-; cmd 11: EST reset, once at start-up: fixed 574 + a3 vs original 266 + 12*94 = 1394
+; cmd 11: EST reset, once at start-up: fixed 1154 + a3 vs original 266 + 12*94 = 1394
 snd_11:	movem.l	d0-d7/a0-a6,-(sp)	; 128
 	lea	HLEV,a5			;  12
 	lea	SHWIN,a4		;  12
 	suba.l	a3,a3			;   8
 	bsr	cmd_11			;  18  (+ a3)
 	move.l	a3,d0			;   4
-	subi.l	#820,d0			;  16
+	subi.l	#240,d0			;  16
 	add.l	d0,HLEV+DEBT		;  28
+	MODDEBT	d0			; 580
 	movem.l	(sp)+,d0-d7/a0-a6	; 132
 	move.w	#($2710-1-E_CMD11),POLLVAR+2	; 20
 	move.l	(sp)+,d1		;  12
@@ -288,16 +384,67 @@ snd_11:	movem.l	d0-d7/a0-a6,-(sp)	; 128
 ; hle_idle
 ; Reached once per frame from the game's "wait for vblank" routine, at the point
 ; where its message queue is drained and it starts polling (hook: "bra.s" ->
-; trampoline "jmp"). That polling loop has a fixed period of 330 cycles, so
-; delaying its start by a multiple of 330 changes nothing. We delay it by
-; -DEBT mod 330 (+k*330): the loop then resumes in the phase it had in the
-; original, which did not spend the job's time on the 68000.
+; trampoline "jmp"). The polling loop (IDLE_L0..) takes 330 cycles per pass: test the
+; callback count, call the one callback (IDLE_CB, the once-a-minute clock watch),
+; compare the vblank counter. The original entered it at the counter compare (pass
+; offset 298) DEBT cycles ago, so it is now at pass offset 310 + DEBT (mod 330)
+; (310 = 298 + our entry, 22 cycles, minus its bra, 10).
+; We continue the original loop from exactly there: each table entry (by DEBT mod 330,
+; kept in DPH with DEBT) selects an instruction boundary of the pass and a short pad;
+; the stub sets up what the original has at that point (the callback index, d0/a0/a1,
+; the callback's stack frame) and jumps in. From then on the 68000 runs the original
+; instructions in the original's phase, so the vblank interrupt lands exactly as there.
+; 380 + pad + setup cycles separate our arrival from that point (before: 910 + D).
+; With another callback set (not seen in play) the old way: delay until the loop's
+; compare is in phase.
 ; ---------------------------------------------------------------------------
 hle_idle:				; 12 (trampoline jmp; the hooked bra.s costs 10 like the original)
+	move.l	IDLE_CBN,d0		; 20  callbacks registered
+	subq.l	#1,d0			;  8
+	bne.w	.leg1			; 10 / 12
+	move.l	IDLE_CBTAB,d0		; 20  the callback
+	cmpi.l	#IDLE_CB,d0		; 14
+	bne.w	.leg2			; 10 / 12   (86)
+	; A vblank the callback has not seen yet (the last frame left the loop before its
+	; callback ran): the original's first call took the long path (84 cycles more,
+	; "last vblank" updated, countdown decremented). Do its effects; when the countdown
+	; is out (the once-a-minute clock read) run the original way instead.
+	move.l	VBLCNT,d1		; 20
+	cmp.l	IDLE_LAST,d1		; 22
+	beq.s	.np			; 10 / 8
+	tst.l	IDLE_CNTDN		; 20
+	beq.w	.leg3			; 10 / 12
+	move.l	d1,IDLE_LAST		; 20
+	subq.l	#1,IDLE_CNTDN		; 28
+	move.w	#2*330,d1		;  8  table quarter: pending
+	bra.s	.q			; 10  (234)
+.np:	moveq	#0,d1			;  4
+	PAD	92			;     (138 + 96 = 234)
+.q:	move.w	HLEV+DPH,d0		; 16
+	add.w	d1,d0			;  4
+	clr.l	HLEV+DEBT		; 28
+	clr.w	HLEV+DPH		; 20  (302)
+	; the first pass after entry also skips the index clear (26 cycles) when the index
+	; was 0, as it usually is at entry
+	tst.l	IDLE_IDX		; 20
+	bne.s	.v1			; 10 / 8
+	addi.w	#330,d0			;  8  table quarter: index 0
+	bra.s	.ix			; 10
+.v1:	PAD	16
+.ix:	add.w	d0,d0			;  4  (348)
+	move.w	.etab(pc,d0.w),d0	; 14
+	jmp	.etab(pc,d0.w)		; 14  = 380 to the stub
+.etab:	IDLE2TAB_DATA
+
+.leg1:	PAD	46			; 38 + 46 = 84
+.leg2:	PAD	82			; 84 + 82 = 166
+.leg3:
+.leg:					; 166
 	movem.l	d0-d2,-(sp)		;  32
 	move.l	HLEV+DEBT,d0		;  20
 	move.l	d0,HLEV+PROBE+8		;  20  probe 2: debt
 	clr.l	HLEV+DEBT		;  28
+	clr.w	HLEV+DPH		;  20
 	addi.l	#330*512,d0		;  16  (keeps it positive; 330*512 = 0 mod 330)
 	; d0 mod 330 in constant time (each step 48 cycles either way)
 MODSTEP		macro
@@ -332,7 +479,167 @@ MODSTEP		macro
 	endr
 	move.l	d0,HLEV+PROBE+12	;  20  probe 3
 	movem.l	(sp)+,d0-d2		;  36
-	jmp	IDLE_RESUME		;  12   total 724 + D = -debt (mod 330)
+	jmp	IDLE_RESUME		;  12   total 910 + D = -debt (mod 330)
+
+; idle stubs: IDLE_SLED nops (the table enters after some of them), then the state the
+; original has at that pass offset, then a jump into its loop. Setup cycles (with the
+; jmp) are in target.json "idle_loop" (gen_target_inc.py builds the table from them).
+ISET1		macro			; callback index 1 (before the loop's clear): 24
+		moveq	#1,d0			;  4
+		move.l	d0,IDLE_IDX		; 20
+		endm
+ISET0		macro			; callback index 0 (between its clear and increment): 28
+		clr.l	IDLE_IDX		; 28
+		endm
+ISLED		macro
+		rept	IDLE_SLED
+		nop
+		endr
+		endm
+; each boundary has two stubs: IST<b> (pad 4m) and ISTB<b> (pad 4m + 6)
+IST0:	ISLED
+	ISET1
+	jmp	IDLE_L0			; 12  = 36
+ISTB0:	ISLED
+	cmp.l	d2,d2			;  6
+	ISET1
+	jmp	IDLE_L0			; 12  = 36
+IST28:	ISLED
+	ISET1
+	jmp	IDLE_L28		; 36
+ISTB28:	ISLED
+	cmp.l	d2,d2			;  6
+	ISET1
+	jmp	IDLE_L28		; 36
+IST48:	ISLED
+	ISET1				; (d0 = 1 = the index the loop just loaded)
+	jmp	IDLE_L48		; 36
+ISTB48:	ISLED
+	cmp.l	d2,d2			;  6
+	ISET1				; (d0 = 1 = the index the loop just loaded)
+	jmp	IDLE_L48		; 36
+IST78:	ISLED
+	ISET1
+	jmp	IDLE_L78		; 36
+ISTB78:	ISLED
+	cmp.l	d2,d2			;  6
+	ISET1
+	jmp	IDLE_L78		; 36
+IST106:	ISLED
+	ISET0
+	jmp	IDLE_L106		; 40
+ISTB106:	ISLED
+	cmp.l	d2,d2			;  6
+	ISET0
+	jmp	IDLE_L106		; 40
+IST122:	ISLED
+	ISET0
+	moveq	#0,d0			;  4
+	jmp	IDLE_L122		; 44
+ISTB122:	ISLED
+	cmp.l	d2,d2			;  6
+	ISET0
+	moveq	#0,d0			;  4
+	jmp	IDLE_L122		; 44
+IST132:	ISLED
+	ISET0
+	moveq	#0,d0			;  4
+	jmp	IDLE_L132		; 44
+ISTB132:	ISLED
+	cmp.l	d2,d2			;  6
+	ISET0
+	moveq	#0,d0			;  4
+	jmp	IDLE_L132		; 44
+IST144:	ISLED
+	ISET0
+	moveq	#0,d0			;  4
+	movea.l	#IDLE_CBTAB,a1		; 12
+	jmp	IDLE_L144		; 56
+ISTB144:	ISLED
+	cmp.l	d2,d2			;  6
+	ISET0
+	moveq	#0,d0			;  4
+	movea.l	#IDLE_CBTAB,a1		; 12
+	jmp	IDLE_L144		; 56
+IST162:	ISLED
+	ISET0
+	movea.l	#IDLE_CB,a0		; 12
+	jmp	IDLE_L162		; 52
+ISTB162:	ISLED
+	cmp.l	d2,d2			;  6
+	ISET0
+	movea.l	#IDLE_CB,a0		; 12
+	jmp	IDLE_L162		; 52
+IST178:	ISLED
+	ISET0
+	pea	IDLE_RET		; 20  (jsr (a0) pushed this)
+	jmp	IDLE_CB			; 60
+ISTB178:	ISLED
+	cmp.l	d2,d2			;  6
+	ISET0
+	pea	IDLE_RET		; 20  (jsr (a0) pushed this)
+	jmp	IDLE_CB			; 60
+IST190:	ISLED
+	ISET0
+	pea	IDLE_RET		; 20
+	move.l	d2,-(sp)		; 12  (the callback saved d2)
+	jmp	IDLE_C12		; 72
+ISTB190:	ISLED
+	cmp.l	d2,d2			;  6
+	ISET0
+	pea	IDLE_RET		; 20
+	move.l	d2,-(sp)		; 12  (the callback saved d2)
+	jmp	IDLE_C12		; 72
+IST210:	ISLED
+	ISET0
+	pea	IDLE_RET		; 20
+	move.l	d2,-(sp)		; 12
+	move.l	VBLCNT,d2		; 20
+	jmp	IDLE_C32		; 92
+ISTB210:	ISLED
+	cmp.l	d2,d2			;  6
+	ISET0
+	pea	IDLE_RET		; 20
+	move.l	d2,-(sp)		; 12
+	move.l	VBLCNT,d2		; 20
+	jmp	IDLE_C32		; 92
+IST242:	ISLED
+	ISET0
+	pea	IDLE_RET		; 20
+	move.l	d2,-(sp)		; 12
+	move.l	VBLCNT,d2		; 20
+	jmp	IDLE_C64		; 92
+ISTB242:	ISLED
+	cmp.l	d2,d2			;  6
+	ISET0
+	pea	IDLE_RET		; 20
+	move.l	d2,-(sp)		; 12
+	move.l	VBLCNT,d2		; 20
+	jmp	IDLE_C64		; 92
+IST254:	ISLED
+	ISET0
+	pea	IDLE_RET		; 20
+	jmp	IDLE_C76		; 60
+ISTB254:	ISLED
+	cmp.l	d2,d2			;  6
+	ISET0
+	pea	IDLE_RET		; 20
+	jmp	IDLE_C76		; 60
+IST270:	ISLED
+	ISET0
+	jmp	IDLE_RET		; 40
+ISTB270:	ISLED
+	cmp.l	d2,d2			;  6
+	ISET0
+	jmp	IDLE_RET		; 40
+IST298:	ISLED
+	ISET1
+	jmp	IDLE_RESUME		; 36
+ISTB298:	ISLED
+	cmp.l	d2,d2			;  6
+	ISET1
+	jmp	IDLE_RESUME		; 36
+
 
 ; pack the results only (test benches that resynchronise state per command)
 hle_pack:

@@ -142,8 +142,8 @@ def main():
     ap.add_argument("--frames", type=int, required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--dump", default="", help="comma list of frames whose full state is saved")
-    ap.add_argument("--ptrlocs", help="reference run: where to write the offsets of its window pointers "
-                    "(default <out>/ptrlocs.txt); converted run: that file (pointer canonicalisation)")
+    ap.add_argument("--ptrlocs", help="converted run: the reference run's <out>/ptrlocs.txt (offsets of its "
+                    "window pointers, for pointer canonicalisation); ignored for the reference run")
     ap.add_argument("--mame", default=os.path.expanduser("~/DDP2_Repair/mame-ddp2bl/pgm"))
     ap.add_argument("--rompath", default=os.path.join(ROOT, "work", "roms"))
     ap.add_argument("--rtc", default=DEFAULT_RTC)
@@ -218,7 +218,9 @@ def main():
             pass
     t.join()
     if collect is not None:
-        with open(a.ptrlocs or os.path.join(out, "ptrlocs.txt"), "w") as f:
+        # always next to the reference run: a --ptrlocs path given here belongs to a full
+        # session and must not be replaced by the list of a short run
+        with open(os.path.join(out, "ptrlocs.txt"), "w") as f:
             f.write("\n".join(str(i) for i in sorted(collect[0])) + "\n")
     shutil.rmtree(tmp, ignore_errors=True)
     print("%s: rc=%d frames=%d" % (out, rc, result.get("frames", 0)))

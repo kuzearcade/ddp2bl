@@ -223,3 +223,14 @@ reproduce it from one power-on to the next.
 | 2p max load (cheats), 81,200 frames | identical up to logical frame 51,156; at video frame 51,783 the converted set's Z80 handshake stalls (1,219 polls, ~186,000 cycles), the original's does not, and the games differ from there (docs/timing.md "68000/Z80 phase") |
 | all 7 captures, protocol stream | identical except the known busy answer; 0 predicted late frames |
 | job accounting in MAME | exact on every job no interrupt hit |
+
+## Current build (idle-loop re-entry, interrupt-aware waits) — regression
+
+| session | result |
+|---|---|
+| 1p full game (cheats), 145,900 frames | every frame displays identically; game-logic RAM: stale stack (55-85), one dead-stack byte frame (15,970), the sequence byte after the ARM busy answer; one logical frame starts across a frame boundary (133,766) |
+| nc1p (no cheats), 106,000 frames | every frame displays identically, sound and lag identical; game-logic RAM: stale stack (51-81, 102,871-102,901) and the dead-stack sentinel copied by the game in one frame (20,540) |
+| 2p max load, 81,200 frames | identical up to logical frame 58,149 (stale stack 55-85, one dead-stack frame 11,408), then a Z80 handshake stall diverges the games (before: 51,157) |
+| nc2p, 89,000 frames | diverges at 9,642 as before (the original's own stall) |
+| fuzzer / protocol streams / margins | 24,000 commands 0 mismatches; all windows identical except the busy answer; 0 predicted late frames |
+| job accounting in MAME | exact (38) on every job no interrupt hit |
