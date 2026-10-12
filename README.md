@@ -114,16 +114,25 @@ The harness ROM path `work/roms/` must hold `pgm.zip`, `ddp2.zip` and the built 
 ### 3. Inputs derived from the dumps (`work/`, not committed)
 
 * `work/prog/v102.be.bin`: `v102.u8` from `ddp2.zip`, byte-swapped to 68000 (big-endian) order.
-* `work/prog/v102.dasm`: its disassembly.
-  ```
-  unidasm -arch m68000 -basepc 100000 work/prog/v102.be.bin > work/prog/v102.dasm
-  ```
-* `work/arm/internal.bin`, `external_dec.bin` and `xortab.bin`: the IGS027A's internal ROM,
-  decrypted external ROM and XOR table. `work/dumparm.lua` dumps them from the running
-  protected set at frame 600:
-  ```
-  OUT=work/arm ~/DDP2_Repair/mame-ddp2bl/pgm ddp2 -rompath work/roms -autoboot_script work/dumparm.lua
-  ```
+* `work/prog/v102.dasm`: its disassembly, made with MAME's `unidasm`.
+* `work/arm/internal.bin`: the IGS027A's internal ROM, which is `ddp2_igs027a_world.bin`
+  from `ddp2.zip`.
+
+To create all three:
+
+```
+mkdir -p work/arm work/prog
+python3 -c 'import zipfile; z = zipfile.ZipFile("work/roms/ddp2.zip")
+open("work/arm/internal.bin", "wb").write(z.read("ddp2_igs027a_world.bin"))
+d = z.read("v102.u8"); o = bytearray(len(d)); o[0::2] = d[1::2]; o[1::2] = d[0::2]
+open("work/prog/v102.be.bin", "wb").write(o)'
+unidasm -arch m68000 -basepc 100000 work/prog/v102.be.bin > work/prog/v102.dasm
+```
+
+The analysis tools (`tools/armref.py`, `harness/fuzz.py`) also need
+`work/arm/external_dec.bin` and `xortab.bin`. These are the decrypted external ARM ROM
+and the XOR table, read from the protected set's `:prot` address space in MAME
+(`0x08000000`, 128 KB, and `0x50000000`, 1 KB) once it has booted.
 
 ### 4. Build the replacement code and the patch list
 
